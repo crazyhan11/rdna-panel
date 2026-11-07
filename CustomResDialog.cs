@@ -172,14 +172,20 @@ namespace RadeonTune
 
             var bar = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
             var cancel = new Button { Content = "取消", Width = 90, Height = 30, Margin = new Thickness(0, 0, 8, 0) };
-            cancel.Click += (_, __) => { Accepted = false; Close(); };
+            cancel.Click += (_, __) => { Accepted = false; DialogResult = false; Close(); };
             _create = new Button
             {
                 Content = "创建", Width = 120, Height = 30,
                 Background = new SolidColorBrush(Color.FromRgb(0xD8, 0x1A, 0x1A)),
                 Foreground = Brushes.White, BorderBrush = Brushes.Transparent,
             };
-            _create.Click += (_, __) => { if (_warn.Text.Length > 0) return; Accepted = true; Close(); };
+            _create.Click += (_, __) =>
+            {
+                if (_warn.Text.Length > 0) return;
+                Accepted = true;
+                DialogResult = true;   // 必须设置，否则 ShowDialog() 返回 null，调用方会当成取消
+                Close();
+            };
             bar.Children.Add(cancel);
             bar.Children.Add(_create);
             root.Children.Add(bar);
@@ -225,6 +231,23 @@ namespace RadeonTune
             catch { return 0; }
         }
 
+        private static bool ModeExists(int w, int h, int hz)
+        {
+            try
+            {
+                var buf = new System.Text.StringBuilder(16384);
+                if (RtCore.rt_modes(buf, buf.Capacity) < 0) return false;
+                foreach (var e in buf.ToString().Split(';', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var p = e.Split(',');
+                    if (p.Length == 3 && int.Parse(p[0]) == w && int.Parse(p[1]) == h && int.Parse(p[2]) == hz)
+                        return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
         private void Recalc()
         {
             if (!int.TryParse(_w.Text, out int w) || !int.TryParse(_h.Text, out int h) ||
@@ -255,6 +278,7 @@ namespace RadeonTune
             _vPol.SelectedIndex = t.VNegative ? 1 : 0;
 
             var problems = _edid.Validate(w, h, hz, t, MaxRefreshFor(w, h));
+            if (ModeExists(w, h, hz)) problems.Add($"该模式已存在（{w}×{h} @ {hz} Hz），请修改分辨率或刷新率");
             if (w > 16384 || h > 16384) problems.Add("分辨率超出单边上限 16384");
             if (t.PixelClockKHz > 2000000) problems.Add("像素时钟超过 2 GHz");
 

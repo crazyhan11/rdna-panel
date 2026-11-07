@@ -125,7 +125,7 @@
         <StackPanel x:Name="HomePanel" Grid.Row="0" Grid.RowSpan="4">
 <StackPanel x:Name="HeroPanel" Orientation="Horizontal">
           <StackPanel Margin="0,0,52,0">
-            <TextBlock Text="核心频率" Foreground="#8E8E93" FontSize="11"/>
+            <TextBlock x:Name="ClockCaption" Text="核心频率" Foreground="#8E8E93" FontSize="11"/>
             <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
               <TextBlock x:Name="ClockText" Text="—" Style="{StaticResource BigNum2}"/>
               <TextBlock Text="MHz" Foreground="#8E8E93" FontSize="13" VerticalAlignment="Bottom" Margin="6,0,0,8"/>
@@ -133,7 +133,7 @@
             <TextBlock x:Name="ClockSubText" Text="" Foreground="#FF453A" FontSize="11" Margin="2,0,0,0"/>
           </StackPanel>
           <StackPanel>
-            <TextBlock Text="电压偏移" Foreground="#8E8E93" FontSize="11"/>
+            <TextBlock x:Name="VoltCaption" Text="电压偏移" Foreground="#8E8E93" FontSize="11"/>
             <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
               <TextBlock x:Name="VoltBigText" Text="—" Foreground="#F2F2F7" FontSize="40"
                          FontFamily="Segoe UI Variable Display, Segoe UI Light"/>

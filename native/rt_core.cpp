@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
 #include <string>
 #include <vector>
 
@@ -178,16 +179,105 @@ RT_API int rt_set_mode(int w, int h, int hz) {
 
 
 // ---------------- 超频读写 ----------------
-static IADLXManualGraphicsTuning2* getGfx2() {
+// 调优接口随世代不同：
+//   pre-Navi(Vega/Polaris) 只给 IADLXManualGraphicsTuning1（V/F 状态表，绝对 MHz/mV）
+//   Navi 及以后(RDNA1~4) 给 IADLXManualGraphicsTuning2（min/max 频率 + 电压）
+//   Navi4(RDNA4) 起 max 频率与电压是相对默认值的偏移；Navi2(RDNA2) 仍是绝对值。
+// 这里统一走 v2，并把“绝对值 / 偏移”语义探测出来交给上层 UI。
+static IADLXInterface* getGfxItf() {
     if (!ensureInit() || !g.tuning) return nullptr;
     IADLXInterface* itf = nullptr;
     ADLX_RESULT rc = g.tuning1 ? g.tuning1->GetManualGFXTuning(g.gpu, &itf)
                                : g.tuning->GetManualGFXTuning(g.gpu, &itf);
     if (rc != ADLX_OK || !itf) return nullptr;
+    return itf;
+}
+
+static IADLXManualGraphicsTuning2* getGfx2() {
+    IADLXInterface* itf = getGfxItf();
+    if (!itf) return nullptr;
     IADLXManualGraphicsTuning2* gfx = nullptr;
     itf->QueryInterface(IADLXManualGraphicsTuning2::IID(), (void**)&gfx);
     itf->Release();
     return gfx;
+}
+
+struct OcCaps {
+    bool hasV2 = false;
+    bool hasV1 = false;
+    bool freqAbsolute = false;    // true: MHz 绝对值；false: 相对默认值的偏移
+    bool voltAbsolute = false;    // true: mV 绝对值；false: mV 偏移
+    bool minFreqSupported = false;
+    int  defMaxFreq = 0;          // v2_1 默认值，0 表示驱动未提供
+    int  defVolt = 0;
+    int  minFreqMin = 0, minFreqMax = 0, minFreqCur = 0;
+    int  maxFreqMin = 0, maxFreqMax = 0, maxFreqCur = 0;
+    int  voltMin = 0, voltMax = 0, voltCur = 0;
+};
+
+static bool queryOcCaps(OcCaps* out) {
+    if (!out) return false;
+    *out = OcCaps{};
+    IADLXInterface* itf = getGfxItf();
+    if (!itf) return false;
+
+    IADLXInterface* v1itf = nullptr;
+    if (itf->QueryInterface(IADLXManualGraphicsTuning1::IID(), (void**)&v1itf) == ADLX_OK && v1itf) {
+        out->hasV1 = true;
+        v1itf->Release();
+    }
+
+    IADLXManualGraphicsTuning2* gfx = nullptr;
+    if (itf->QueryInterface(IADLXManualGraphicsTuning2::IID(), (void**)&gfx) != ADLX_OK || !gfx) {
+        itf->Release();
+        return false;
+    }
+    itf->Release();
+    out->hasV2 = true;
+
+    ADLX_IntRange mr{}, fr{}, vr{};
+    if (gfx->GetGPUMinFrequencyRange(&mr) == ADLX_OK) {
+        out->minFreqMin = (int)mr.minValue;
+        out->minFreqMax = (int)mr.maxValue;
+        out->minFreqSupported = mr.maxValue > 0 && mr.maxValue > mr.minValue;
+        adlx_int cur = 0;
+        if (gfx->GetGPUMinFrequency(&cur) == ADLX_OK) out->minFreqCur = (int)cur;
+    }
+    if (gfx->GetGPUMaxFrequencyRange(&fr) == ADLX_OK) {
+        out->maxFreqMin = (int)fr.minValue;
+        out->maxFreqMax = (int)fr.maxValue;
+        adlx_int cur = 0;
+        if (gfx->GetGPUMaxFrequency(&cur) == ADLX_OK) out->maxFreqCur = (int)cur;
+    }
+    if (gfx->GetGPUVoltageRange(&vr) == ADLX_OK) {
+        out->voltMin = (int)vr.minValue;
+        out->voltMax = (int)vr.maxValue;
+        adlx_int cur = 0;
+        if (gfx->GetGPUVoltage(&cur) == ADLX_OK) out->voltCur = (int)cur;
+    }
+
+    IADLXManualGraphicsTuning2_1* g21 = nullptr;
+    if (gfx->QueryInterface(IADLXManualGraphicsTuning2_1::IID(), (void**)&g21) == ADLX_OK && g21) {
+        adlx_int v = 0;
+        if (g21->GetGPUMaxFrequencyDefault(&v) == ADLX_OK) out->defMaxFreq = (int)v;
+        if (g21->GetGPUVoltageDefault(&v) == ADLX_OK) out->defVolt = (int)v;
+        g21->Release();
+    }
+    gfx->Release();
+
+    // 语义判定：
+    //  - RDNA2 的默认 max 频率约 2400 MHz、默认电压约 1150 mV，落在绝对量程内；
+    //  - RDNA4 的默认值是偏移，通常为 0（或接近 0），且量程跨越 0 / 上限为 0。
+    // 优先用驱动默认值判断，默认值不可用时退回量程判断。
+    if (out->maxFreqMax > 0) {
+        if (out->defMaxFreq > 300) out->freqAbsolute = true;
+        else if (out->defMaxFreq == 0 && out->maxFreqMin > 0 && out->maxFreqMin >= 300) out->freqAbsolute = true;
+    }
+    if (out->voltMax > 0) {
+        if (out->defVolt > 300) out->voltAbsolute = true;
+        else if (out->defVolt == 0 && out->voltMin > 0 && out->voltMin >= 300) out->voltAbsolute = true;
+    }
+    return true;
 }
 
 static IADLXManualPowerTuning* getPower() {
@@ -257,6 +347,44 @@ RT_API int rt_oc2_set_power(int pct) {
     if (!pw) return -2;
     int rc = pw->SetPowerLimit(pct);
     pw->Release();
+    return rc == ADLX_OK ? 0 : -100 + rc;
+}
+
+// 能力/语义：v2|v1|freq_abs|volt_abs|minfreq_sup|default_maxfreq|default_volt
+RT_API int rt_oc2_caps(char* buf, int len) {
+    if (!buf || len <= 0) return -1;
+    OcCaps c{};
+    if (!queryOcCaps(&c)) {
+        snprintf(buf, (size_t)len, "0|0|0|0|0|0|0");
+        return -2;
+    }
+    snprintf(buf, (size_t)len, "%d|%d|%d|%d|%d|%d|%d",
+             c.hasV2 ? 1 : 0, c.hasV1 ? 1 : 0,
+             c.freqAbsolute ? 1 : 0, c.voltAbsolute ? 1 : 0,
+             c.minFreqSupported ? 1 : 0, c.defMaxFreq, c.defVolt);
+    return 0;
+}
+
+// 最小频率：min|max|cur
+RT_API int rt_oc2_min(char* buf, int len) {
+    if (!buf || len <= 0) return -1;
+    auto* gfx = getGfx2();
+    if (!gfx) return -2;
+    ADLX_IntRange r{};
+    adlx_int cur = 0;
+    int rc = gfx->GetGPUMinFrequencyRange(&r);
+    gfx->GetGPUMinFrequency(&cur);
+    gfx->Release();
+    if (rc != ADLX_OK) return -3;
+    snprintf(buf, (size_t)len, "%d|%d|%d", (int)r.minValue, (int)r.maxValue, (int)cur);
+    return 0;
+}
+
+RT_API int rt_oc2_set_min(int mhz) {
+    auto* gfx = getGfx2();
+    if (!gfx) return -2;
+    int rc = gfx->SetGPUMinFrequency(mhz);
+    gfx->Release();
     return rc == ADLX_OK ? 0 : -100 + rc;
 }
 
@@ -875,29 +1003,29 @@ RT_API int rt_set_rsr_sharp(int v) {
     return rc == ADLX_OK ? 0 : -100 + rc;
 }
 
-// ---------------- OD8 限额（轻量：从 ADLX 区间拼装） ----------------
+// ---------------- 驱动可调范围（只读） ----------------
 RT_API int rt_od8_limits(char* buf, int len) {
     if (!buf || len <= 0) return -1;
     if (!ensureInit()) return -2;
-    int fmin = 0, fmax = 0, pmin = 0, pmax = 0, vmin = 0, vmax = 0;
-    auto* gfx = getGfx2();
-    if (gfx) {
-        ADLX_IntRange fr{}, vr{};
-        gfx->GetGPUMaxFrequencyRange(&fr);
-        gfx->GetGPUVoltageRange(&vr);
-        fmin = (int)fr.minValue; fmax = (int)fr.maxValue;
-        vmin = (int)vr.minValue; vmax = (int)vr.maxValue;
-        gfx->Release();
-    }
+    OcCaps c{};
+    queryOcCaps(&c);
+    int pmin = 0, pmax = 0, pcur = 0;
     auto* pw = getPower();
     if (pw) {
         ADLX_IntRange pr{};
         pw->GetPowerLimitRange(&pr);
+        pw->GetPowerLimit(&pcur);
         pmin = (int)pr.minValue; pmax = (int)pr.maxValue;
         pw->Release();
     }
-    snprintf(buf, (size_t)len, "freqmin=%d freqmax=%d pwrmin=%d pwrmax=%d voltmin=%d voltmax=%d",
-             fmin, fmax, pmin, pmax, vmin, vmax);
+    snprintf(buf, (size_t)len,
+             "freqmin=%d freqmax=%d freqcur=%d minfreqmin=%d minfreqmax=%d minfreqcur=%d "
+             "pwrmin=%d pwrmax=%d pwrcur=%d voltmin=%d voltmax=%d voltcur=%d fabs=%d vabs=%d minsup=%d",
+             c.maxFreqMin, c.maxFreqMax, c.maxFreqCur,
+             c.minFreqMin, c.minFreqMax, c.minFreqCur,
+             pmin, pmax, pcur,
+             c.voltMin, c.voltMax, c.voltCur,
+             c.freqAbsolute ? 1 : 0, c.voltAbsolute ? 1 : 0, c.minFreqSupported ? 1 : 0);
     return 0;
 }
 
@@ -921,8 +1049,12 @@ RT_API int rt_cr_del(int index) {
 
 // 限制：ADLX 只提供 IADLXDisplayResolutionList::Add_Back(IADLXDisplayResolution*)，
 // 但没有"从零构造 IADLXDisplayResolution"的工厂；列表为空时无法克隆出条目。
-// 因此本函数恒返回 -1，界面提示"尚未创建，需先在驱动面板创建一条"。
-// 若将来 ADLX 提供创建接口，在此实现即可（CreateNewResolution 已可用）。
+// Add 通过 GetCurrentAppliedResolution() 克隆当前时序后修改目标字段实现。
+//
+// 额外防护（驱动 1.4 的 CreateNewResolution/DeleteResolution 很挑输入）：
+//   - 已存在的自定义模式直接拒绝（同一 w/h/hz 重复创建会留下删不掉的幽灵条目）
+//   - 系统已原生支持的模式直接拒绝（驱动会返回 INVALID_ARGS）
+//   - 创建后回读列表确认条目真的出现
 RT_API int rt_cr_add_ex(int w, int h, int hz, int presentation, int timingStandard, int pixClock,
                         int tFlags, int hTotal, int vTotal, int hDisp, int vDisp,
                         int hFront, int vFront, int hSync, int vSync, int hPol, int vPol) {
@@ -931,9 +1063,24 @@ RT_API int rt_cr_add_ex(int w, int h, int hz, int presentation, int timingStanda
 
     IADLXDisplayCustomResolution* cr = nullptr;
     if (g.dsp->GetCustomResolution(g.disp, &cr) != ADLX_OK || !cr) return -2;
-    adlx_bool sup = false;
-    cr->IsSupported(&sup);
-    if (!sup) { cr->Release(); return -4; }
+
+    // 注意：IsSupported 在 ADLX 1.4 上不稳定（已有条目时可能返回 false，但创建仍会成功），
+    // 这里不再用它硬拦截，交给 CreateNewResolution 的返回值判断。
+
+    // 列表里已有同一 w/h/refresh 的条目则拒绝，避免重复创建导致无法删除的幽灵模式
+    IADLXDisplayResolutionList* list0 = nullptr;
+    if (cr->GetResolutionList(&list0) == ADLX_OK && list0) {
+        for (adlx_uint i = 0; i < list0->Size(); i++) {
+            IADLXDisplayResolution* item = nullptr;
+            if (list0->At(i, &item) != ADLX_OK || !item) continue;
+            ADLX_CustomResolution cv{};
+            bool dup = item->GetValue(&cv) == ADLX_OK &&
+                       (int)cv.resWidth == w && (int)cv.resHeight == h && (int)cv.refreshRate == hz;
+            item->Release();
+            if (dup) { list0->Release(); cr->Release(); return -200; }
+        }
+        list0->Release();
+    }
 
     // 取当前生效分辨率作为模板对象（ADLX 未提供从零构造的工厂）
     IADLXDisplayResolution* res = nullptr;
@@ -965,8 +1112,77 @@ RT_API int rt_cr_add_ex(int w, int h, int hz, int presentation, int timingStanda
 
     ADLX_RESULT rc = cr->CreateNewResolution(res);
     res->Release();
+    if (rc != ADLX_OK) { cr->Release(); return -100 + (int)rc; }
+
+    // 回读确认：列表里必须出现目标模式，否则视为失败（驱动可能静默丢弃）
+    bool found = false;
+    IADLXDisplayResolutionList* list1 = nullptr;
+    if (cr->GetResolutionList(&list1) == ADLX_OK && list1) {
+        for (adlx_uint i = 0; i < list1->Size(); i++) {
+            IADLXDisplayResolution* item = nullptr;
+            if (list1->At(i, &item) != ADLX_OK || !item) continue;
+            ADLX_CustomResolution cv{};
+            if (item->GetValue(&cv) == ADLX_OK &&
+                (int)cv.resWidth == w && (int)cv.resHeight == h && (int)cv.refreshRate == hz) found = true;
+            item->Release();
+            if (found) break;
+        }
+        list1->Release();
+    }
     cr->Release();
-    return rc == ADLX_OK ? 0 : -100 + (int)rc;
+    return found ? 0 : -202;
+}
+
+// 清理驱动持久化的自定义分辨率（DAL3_DATA\common\EDID_*\mode_timing_override）。
+// 驱动 1.4 在列表进入异常状态后 DeleteResolution 会一直返回 INVALID_ARGS，
+// 只能清掉注册表里的持久化数据并重启显卡驱动/系统。
+// 返回删除的条目数；-1 参数/权限错误。
+RT_API int rt_cr_reset(int keepBackup) {
+    const wchar_t* base = L"SYSTEM\\CurrentControlSet\\Control\\Class\\"
+                          L"{4d36e968-e325-11ce-bfc1-08002be10318}\\0000\\DAL3_DATA\\common";
+    HKEY common = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, base, 0, KEY_READ | KEY_WRITE, &common) != ERROR_SUCCESS) return -1;
+
+    wchar_t sub[256];
+    DWORD idx = 0, slen = 256;
+    int removed = 0;
+    while (RegEnumKeyExW(common, idx++, sub, &slen, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+        slen = 256;
+        if (wcsncmp(sub, L"EDID_", 5) != 0) continue;
+        HKEY k = nullptr;
+        if (RegOpenKeyExW(common, sub, 0, KEY_READ | KEY_WRITE, &k) != ERROR_SUCCESS) continue;
+        DWORD type = 0, size = 0;
+        if (RegQueryValueExW(k, L"mode_timing_override", nullptr, &type, nullptr, &size) == ERROR_SUCCESS &&
+            type == REG_BINARY && size > 0) {
+            if (keepBackup) {
+                std::vector<BYTE> buf(size);
+                DWORD rsize = size;
+                if (!buf.empty() && RegQueryValueExW(k, L"mode_timing_override", nullptr, &type, buf.data(), &rsize) == ERROR_SUCCESS) {
+                    wchar_t path[MAX_PATH] = {0};
+                    DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", path, MAX_PATH);
+                    if (n > 0) {
+                        wchar_t dir[MAX_PATH] = {0};
+                        swprintf_s(dir, L"%ls\\RDNA Panel", path);
+                        CreateDirectoryW(dir, nullptr);
+                        wchar_t file[MAX_PATH] = {0};
+                        SYSTEMTIME st; GetLocalTime(&st);
+                        swprintf_s(file, L"%ls\\cr-backup-%04d%02d%02d-%02d%02d%02d.bin",
+                                   dir, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                        HANDLE hf = CreateFileW(file, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                        if (hf != INVALID_HANDLE_VALUE) {
+                            DWORD written = 0;
+                            WriteFile(hf, buf.data(), rsize, &written, nullptr);
+                            CloseHandle(hf);
+                        }
+                    }
+                }
+            }
+            if (RegDeleteValueW(k, L"mode_timing_override") == ERROR_SUCCESS) removed++;
+        }
+        RegCloseKey(k);
+    }
+    RegCloseKey(common);
+    return removed;
 }
 
 RT_API int rt_smu_available(char* buf, int len) {
@@ -989,7 +1205,13 @@ RT_API int rt_dbg(char* buf, int len) {
     IADLXManualGraphicsTuning2* gfx = nullptr;
     int qi = -1;
     if (itf) { qi = (int)itf->QueryInterface(IADLXManualGraphicsTuning2::IID(), (void**)&gfx); }
-    snprintf(buf, (size_t)len, "t1=%d tuning=%d rc=%d itf=%d qi=%d gfx=%d", g.tuning1 ? 1 : 0, t, rc, itf ? 1 : 0, qi, gfx ? 1 : 0);
+    OcCaps c{};
+    queryOcCaps(&c);
+    snprintf(buf, (size_t)len,
+             "t1=%d tuning=%d rc=%d itf=%d qi=%d gfx=%d | v1=%d fabs=%d vabs=%d minsup=%d defmax=%d defvolt=%d",
+             g.tuning1 ? 1 : 0, t, rc, itf ? 1 : 0, qi, gfx ? 1 : 0,
+             c.hasV1 ? 1 : 0, c.freqAbsolute ? 1 : 0, c.voltAbsolute ? 1 : 0,
+             c.minFreqSupported ? 1 : 0, c.defMaxFreq, c.defVolt);
     if (gfx) gfx->Release();
     if (itf) itf->Release();
     return 0;
