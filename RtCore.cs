@@ -46,6 +46,12 @@ namespace RadeonTune
         public static extern int rt_set_vram_oc(int mhz);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern int rt_timing_info(StringBuilder buf, int len);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int rt_timing_set(int desc);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern int rt_disp_name(int idx, StringBuilder buf, int len);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]

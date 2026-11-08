@@ -1413,3 +1413,45 @@ RT_API int rt_set_vram_oc(int mhz) {
     v->Release();
     return rc == ADLX_OK ? 0 : (int)rc;
 }
+
+// ---------------- 显存快定时（RDNA2 允许） ----------------
+static IADLXManualVRAMTuning1* getVram1() {
+    if (!ensureInit() || !g.tuning || !g.gpu) return nullptr;
+    IADLXInterface* vif = nullptr;
+    if (g.tuning->GetManualVRAMTuning(g.gpu, &vif) != ADLX_OK || !vif) return nullptr;
+    IADLXInterface* itf = nullptr;
+    vif->QueryInterface(IADLXManualVRAMTuning1::IID(), (void**)&itf);
+    vif->Release();
+    return static_cast<IADLXManualVRAMTuning1*>(itf);
+}
+
+RT_API int rt_timing_info(char* buf, int len) {
+    if (!buf || len <= 0) return -1;
+    if (!ensureInit()) return -2;
+    int allowed = isRdna2() ? 1 : 0;
+    int supported = 0, current = -1;
+    if (allowed) {
+        IADLXManualVRAMTuning1* v = getVram1();
+        if (v) {
+            adlx_bool sup = false;
+            if (v->IsSupportedMemoryTiming(&sup) == ADLX_OK && sup) {
+                supported = 1;
+                ADLX_MEMORYTIMING_DESCRIPTION cur = MEMORYTIMING_DEFAULT;
+                if (v->GetMemoryTimingDescription(&cur) == ADLX_OK) current = (int)cur;
+            }
+            v->Release();
+        }
+    }
+    snprintf(buf, (size_t)len, "%d|%d|%d", allowed, supported, current);
+    return 0;
+}
+
+RT_API int rt_timing_set(int desc) {
+    if (!ensureInit()) return -2;
+    if (!isRdna2()) return -403;
+    IADLXManualVRAMTuning1* v = getVram1();
+    if (!v) return -404;
+    ADLX_RESULT rc = v->SetMemoryTimingDescription((ADLX_MEMORYTIMING_DESCRIPTION)desc);
+    v->Release();
+    return rc == ADLX_OK ? 0 : (int)rc;
+}
