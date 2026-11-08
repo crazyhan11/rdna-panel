@@ -7,6 +7,7 @@
 
 #include "ADLXHelper.h"
 #include "ADLX.h"
+#include "IGPUManualVRAMTuning.h"
 #include "IDisplays.h"
 #include "IDisplays3.h"
 #include "IDisplaySettings.h"
@@ -1355,4 +1356,60 @@ RT_API int rt_disp_select(int idx) {
     if (g.disp) g.disp->Release();
     g.disp = d; dl->Release();
     return 0;
+}
+
+// ---------------- 显存超频（仅 RDNA2 允许；RDNA3+ 禁止） ----------------
+static long gpuDeviceId() {
+    if (!g.gpu) return -1;
+    const char* did = nullptr;
+    g.gpu->DeviceId(&did);
+    return did ? strtol(did, nullptr, 16) : -1;
+}
+
+static bool isRdna2() {
+    long id = gpuDeviceId();
+    return (id >= 0x73A0 && id <= 0x73FF) ||   // Navi 21/22/23
+           (id >= 0x7420 && id <= 0x743F) ||   // Navi 24
+           id == 0x163F || id == 0x1681 || id == 0x1506;
+}
+
+static IADLXManualVRAMTuning2* getVram2() {
+    if (!ensureInit() || !g.tuning || !g.gpu) return nullptr;
+    IADLXInterface* vif = nullptr;                       // GetManualVRAMTuning 返回通用接口
+    if (g.tuning->GetManualVRAMTuning(g.gpu, &vif) != ADLX_OK || !vif) return nullptr;
+    IADLXInterface* itf = nullptr;
+    vif->QueryInterface(IADLXManualVRAMTuning2::IID(), (void**)&itf);
+    vif->Release();
+    return static_cast<IADLXManualVRAMTuning2*>(itf);
+}
+
+RT_API int rt_vram_oc_info(char* buf, int len) {
+    if (!buf || len <= 0) return -1;
+    if (!ensureInit()) return -2;
+    int allowed = isRdna2() ? 1 : 0;
+    int mn = 0, mx = 0, cur = 0;
+    if (allowed) {
+        IADLXManualVRAMTuning2* v = getVram2();
+        if (v) {
+            ADLX_IntRange r{};
+            if (v->GetMaxVRAMFrequencyRange(&r) == ADLX_OK) { mn = (int)r.minValue; mx = (int)r.maxValue; }
+            adlx_int f = 0;
+            if (v->GetMaxVRAMFrequency(&f) == ADLX_OK) cur = (int)f;
+            v->Release();
+        } else {
+            allowed = 0;
+        }
+    }
+    snprintf(buf, (size_t)len, "%d|%d|%d|%d", allowed, mn, mx, cur);
+    return 0;
+}
+
+RT_API int rt_set_vram_oc(int mhz) {
+    if (!ensureInit()) return -2;
+    if (!isRdna2()) return -403;   // RDNA3+ 明确禁止
+    IADLXManualVRAMTuning2* v = getVram2();
+    if (!v) return -404;
+    ADLX_RESULT rc = v->SetMaxVRAMFrequency((adlx_int)mhz);
+    v->Release();
+    return rc == ADLX_OK ? 0 : (int)rc;
 }

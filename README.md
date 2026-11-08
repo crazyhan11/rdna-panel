@@ -51,9 +51,15 @@ the UI is plain WPF with no WebView and no Explorer dependency, and presets live
 
 ## What it deliberately does not do
 
-**No VRAM overclocking, no memory voltage or timing tuning.** A memory clock change on these GPUs
-forces a UCLK switch, and combined with the driver's anti-droop (LLC) regulation that is a classic
-source of display-link instability (black/white screens).
+**VRAM overclocking: enabled on RDNA2, disabled on RDNA3 and newer.**
+
+- **RDNA2 (Navi 21/22/23/24)** — memory overclocking is available. It is an explicit opt-in and the
+  usual caution applies (stress test, watch for display glitches).
+- **RDNA3 / RDNA4** — memory overclocking is **blocked in the UI and refused by the native core**
+  (`rt_set_vram_oc` returns `-403`). A memory clock change on these GPUs forces a UCLK switch, and
+  combined with the VRM's anti-droop (load-line) behaviour that is a classic source of display-link
+  instability (black/white screens).
+- Memory voltage and timing tuning are not exposed on any generation.
 
 **This is a known AMD issue, unfixed from RDNA3 through RDNA4:** a memory overclock passes stress tests
 and then drops the display at idle ↔ load transitions. Load-line / droop lives in the VRM (I2C register) or the
@@ -172,7 +178,11 @@ RDNA Panel 绕开这两个失效点（完整分析与「观察/推理」的区�
 
 ## 刻意不做的事
 
-**不提供显存超频，也不做显存电压/时序调节。** 这类显卡上改显存频率会触发 UCLK 切换，
+**显存超频：RDNA2 允许，RDNA3 及更新架构禁止。**
+
+- **RDNA2（Navi 21/22/23/24）** —— 可以超显存，但需要显式开启，风险自负（先做压力测试，注意花屏/黑屏）。
+- **RDNA3 / RDNA4** —— 显存超频在界面中**不提供**，原生核心也会**拒绝**（`rt_set_vram_oc` 返回 `-403`）。
+  这类显卡上改显存频率会触发 UCLK 切换，
 再叠加驱动的防掉压（LLC）调节，是显示链路失稳（黑屏/白屏）的典型来源。
 
 **这是 AMD 侧从 RDNA3 到 RDNA4 都没修的问题**：显存超频能过压力测试，却会在空载↔负载切换时掉显示。
