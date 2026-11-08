@@ -1,7 +1,7 @@
 ﻿; ---- RadeonTune installer (NSIS 3) ----
 Unicode true
 !define APPNAME "RDNA Panel"
-!define VERSION "1.3.0-rdna2"
+!define VERSION "1.3.1"
 Name "${APPNAME} ${VERSION}"
 OutFile "RDNAPanel-Setup-${VERSION}.exe"
 InstallDir "$LOCALAPPDATA\Programs\RDNAPanel"
