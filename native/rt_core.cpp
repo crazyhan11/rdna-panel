@@ -1320,3 +1320,39 @@ RT_API int rt_mon_at(int idx, char* buf, int len) {
              (int)fan, (int)fan, (int)(board > 0 ? board : power), (int)usage, 0);
     return 0;
 }
+
+// ---------------- 显示器枚举（诊断/多屏支持） ----------------
+RT_API int rt_disp_count(void) {
+    if (!ensureInit() || !g.dsp) return -1;
+    IADLXDisplayList* dl = nullptr;
+    if (g.dsp->GetDisplays(&dl) != ADLX_OK || !dl) return -2;
+    int n = (int)dl->Size();
+    dl->Release();
+    return n;
+}
+
+RT_API int rt_disp_name(int idx, char* buf, int len) {
+    if (!buf || len <= 0) return -1;
+    if (!ensureInit() || !g.dsp) return -2;
+    IADLXDisplayList* dl = nullptr;
+    if (g.dsp->GetDisplays(&dl) != ADLX_OK || !dl) return -2;
+    if (idx < 0 || (adlx_uint)idx >= dl->Size()) { dl->Release(); return -3; }
+    IADLXDisplay* d = nullptr;
+    if (dl->At((adlx_uint)idx, &d) != ADLX_OK || !d) { dl->Release(); return -3; }
+    const char* nm = nullptr; d->Name(&nm);
+    snprintf(buf, (size_t)len, "%s", nm ? nm : "?");
+    d->Release(); dl->Release();
+    return 0;
+}
+
+RT_API int rt_disp_select(int idx) {
+    if (!ensureInit() || !g.dsp) return -2;
+    IADLXDisplayList* dl = nullptr;
+    if (g.dsp->GetDisplays(&dl) != ADLX_OK || !dl) return -2;
+    if (idx < 0 || (adlx_uint)idx >= dl->Size()) { dl->Release(); return -3; }
+    IADLXDisplay* d = nullptr;
+    if (dl->At((adlx_uint)idx, &d) != ADLX_OK || !d) { dl->Release(); return -3; }
+    if (g.disp) g.disp->Release();
+    g.disp = d; dl->Release();
+    return 0;
+}

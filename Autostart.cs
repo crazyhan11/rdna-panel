@@ -23,6 +23,8 @@ namespace RadeonTune
             public string Language { get; set; } = "zh";
             /// <summary>选中的显卡索引（多卡时使用）。</summary>
             public int GpuIndex { get; set; } = -1;
+            /// <summary>当前操作的显示器索引（多屏）。</summary>
+            public int DisplayIndex { get; set; } = 0;
             /// <summary>是否同时轮询非当前显卡（会阻止 CPU 进入深 C-state，默认关闭）。</summary>
             public bool PollOtherGpus { get; set; } = false;
         }
