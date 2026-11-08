@@ -20,7 +20,8 @@ namespace RadeonTune
         public int FanPct { get; set; }
             public int VramMhz { get; set; }
             public bool HasVram { get; set; }
-            public int TimingDesc { get; set; }
+            /// <summary>显存时序的枚举名（跨驱动/跨卡稳定）。</summary>
+            public string TimingName { get; set; }
             public bool HasTiming { get; set; }
         public string FanCurve { get; set; } = "";
         public bool AutoApply { get; set; }
@@ -249,7 +250,16 @@ namespace RadeonTune
                     MarkFailed(kv.Key, rc, back);
                     if (!string.IsNullOrEmpty(p.FanCurve)) RtCore.rt_set_fan_curve(p.FanCurve);
             else if (p.FanPct > 0) RtCore.rt_set_fan(p.FanPct);
-            if (p.HasTiming && p.TimingDesc >= 0) { var ti2 = new StringBuilder(64); RtCore.rt_timing_info(ti2, ti2.Capacity); if (ti2.ToString().StartsWith("1|1|")) RtCore.rt_timing_set(p.TimingDesc); }
+            if (p.HasTiming && !string.IsNullOrEmpty(p.TimingName))
+            {
+                int cnt = RtCore.rt_timing_count();
+                for (int i = 0; i < cnt; i++)
+                {
+                    var nb = new StringBuilder(64);
+                    if (RtCore.rt_timing_name(i, nb, nb.Capacity) == 0 && nb.ToString() == p.TimingName)
+                    { RtCore.rt_timing_set_index(i); break; }
+                }
+            }
             if (p.HasVram && p.VramMhz > 0) { var vr2 = new StringBuilder(64); RtCore.rt_vram_oc_info(vr2, vr2.Capacity); if (vr2.ToString().StartsWith("1|")) RtCore.rt_set_vram_oc(p.VramMhz); }
             return new EngineResult { Ok = false, Action = "failed", Detail = $"{kv.Key} rc={rc} back={back}" };
                 }

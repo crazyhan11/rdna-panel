@@ -2337,12 +2337,12 @@ namespace RadeonTune
                     p.FreqOffset = int.Parse(f[2]);
                     p.PowerPct = int.Parse(f[5]);
                     p.HasOc = true;
-            var ti = new StringBuilder(64);
-            if (RtCore.rt_timing_info(ti, ti.Capacity) == 0)
+            int tIdx = RtCore.rt_timing_current_index();
+            if (tIdx >= 0)
             {
-                var tv = ti.ToString().Split('|');
-                if (tv.Length > 2 && tv[0] == "1" && tv[1] == "1" && int.TryParse(tv[2], out var tdesc) && tdesc >= 0)
-                { p.TimingDesc = tdesc; p.HasTiming = true; }
+                var tn = new StringBuilder(64);
+                if (RtCore.rt_timing_name(tIdx, tn, tn.Capacity) == 0 && tn.Length > 0)
+                { p.TimingName = tn.ToString(); p.HasTiming = true; }
             }
             var vr = new StringBuilder(64);
             if (RtCore.rt_vram_oc_info(vr, vr.Capacity) == 0)
