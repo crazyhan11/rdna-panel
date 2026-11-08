@@ -80,3 +80,25 @@ needs a fallback display path (iGPU / second GPU) plus a recovery procedure.
 - VRAM/UCLK: architectural reasoning about how memory clock changes are executed; explicitly **not**
   a measurement, and not presented as one.
 
+## 4. Memory timing presets (Default / Fast Timing / Level 1-2)
+
+ADLX exposes six timing descriptions, but **AMD publishes no definition of what each one changes**:
+
+- `ADLXDefines.h` only names them: `MEMORYTIMING_DEFAULT`, `FAST_TIMING`, `FAST_TIMING_LEVEL_2`,
+  `AUTOMATIC`, `MEMORYTIMING_LEVEL_1`, `MEMORYTIMING_LEVEL_2`.
+- AMD's own tuning KB (DH2-020, "How to Tune GPU Performance Using Radeon Software") lists *Memory
+  Timing* as a tuning option but does not explain the levels.
+- The ADLX sample only maps the enum values to display strings and enumerates whatever the driver
+  reports via `GetSupportedMemoryTimingDescriptionList`.
+
+Community measurements (RX 550, WattMan, 1900 MHz, OCL MemBench): Automatic 97.7 GB/s,
+Level 1 103 GB/s, Level 2 104 GB/s — i.e. **higher level = tighter timings / more bandwidth**, and
+Level 1/2 at 1900 MHz beat 1950 MHz at Automatic. The same article states AMD provides no complete
+documentation of which timings change.
+
+Sources:
+- https://web.archive.org/web/20210209154909/https://www.amd.com/en/support/kb/faq/dh2-020
+- https://oc.jagatreview.com/2019/01/tweaking-gpu-memory-timing-di-radeon-wattman-radeon-software-adrenalin-2019/2/
+
+Because of that, RadeonTune **enumerates the driver's supported list** instead of hardcoding names, and on
+RDNA3/RDNA4 the whole memory-timing section is absent (same policy as VRAM clock).

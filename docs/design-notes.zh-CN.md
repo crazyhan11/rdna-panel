@@ -67,3 +67,23 @@ Max Droop Compensation 25 mV -> 20 mV
 - 预设丢失：本机反复出现、用户可见的行为。
 - 显存/UCLK：关于显存频率切换如何执行的架构推理；**明确不是测量**，也不当作测量来表述。
 
+## 4. 显存时序预设（Default / Fast Timing / Level 1-2）
+
+ADLX 暴露六种时序描述，但 **AMD 没有公开每一种具体改了什么**：
+
+- `ADLXDefines.h` 只给了名字：`MEMORYTIMING_DEFAULT`、`FAST_TIMING`、`FAST_TIMING_LEVEL_2`、
+  `AUTOMATIC`、`MEMORYTIMING_LEVEL_1`、`MEMORYTIMING_LEVEL_2`；
+- AMD 官方调优文档（DH2-020《How to Tune GPU Performance Using Radeon Software》）把 *Memory Timing*
+  列为可调项，但没有解释 level 的含义；
+- ADLX 官方示例只是把枚举映射成字符串，并枚举驱动通过
+  `GetSupportedMemoryTimingDescriptionList` 报上来的项。
+
+社区实测（RX 550、WattMan、1900 MHz、OCL MemBench）：Automatic 97.7 GB/s、Level 1 103 GB/s、
+Level 2 104 GB/s——即 **level 越高时脉越紧、带宽越大**，且 1900 MHz + Level 1/2 快过 1950 MHz + Automatic。
+同一篇也写明 AMD 没有提供完整文档说明改了哪些时序。
+
+来源：
+- https://web.archive.org/web/20210209154909/https://www.amd.com/en/support/kb/faq/dh2-020
+- https://oc.jagatreview.com/2019/01/tweaking-gpu-memory-timing-di-radeon-wattman-radeon-software-adrenalin-2019/2/
+
+因此 RadeonTune **枚举驱动支持列表**而不是写死名称；RDNA3/RDNA4 下整个显存时序区不显示（与显存频率同一策略）。
