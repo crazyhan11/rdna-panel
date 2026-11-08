@@ -551,6 +551,7 @@ namespace RadeonTune
                 {
                     int rw = int.Parse(e.Args[idx + 1]), rh = int.Parse(e.Args[idx + 2]), rz = int.Parse(e.Args[idx + 3]);
                     window.CliApplyMode(rw, rh, rz);
+                    Shutdown(0);
                     return;
                 }
             }
@@ -568,6 +569,7 @@ namespace RadeonTune
                 window.Show();
             }
             Log("stage=window-shown");
+            StartTdrWatchdog();
             base.OnStartup(e);
         }
 
@@ -619,6 +621,46 @@ namespace RadeonTune
         {
             try { File.Delete(BootFlag); } catch { }
             base.OnExit(e);
+        }
+
+        private static DateTime _lastTdrCheck = DateTime.Now;
+
+        /// <summary>TDR 看门狗：检测到显示驱动重置（事件 4101）后重新应用开机预设。</summary>
+        private static void StartTdrWatchdog()
+        {
+            var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+            t.Tick += (_, __) =>
+            {
+                try
+                {
+                    var since = _lastTdrCheck;
+                    _lastTdrCheck = DateTime.Now;
+                    bool tdr = false;
+                    using (var log = new System.Diagnostics.EventLog("System"))
+                    {
+                        var entries = log.Entries;
+                        int start = Math.Max(0, entries.Count - 200);
+                        for (int i = entries.Count - 1; i >= start; i--)
+                        {
+                            var e = entries[i];
+                            if (e.TimeGenerated < since) break;
+                            if (e.InstanceId == 4101 || e.InstanceId == 1 && (e.Source ?? "").Contains("amdkmdag"))
+                            {
+                                tdr = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!tdr) return;
+                    var auto = Engine.LoadProfiles().Values.FirstOrDefault(x => x.AutoApply);
+                    if (auto == null) return;
+                    var r = Engine.ApplySafe(auto);
+                    Log($"tdr: recovered, reapply {auto.Name} -> {(r.Ok ? "OK" : r.Detail)}");
+                }
+                catch { }
+            };
+            t.Start();
+            Log("tdr: watchdog started");
         }
     }
 }

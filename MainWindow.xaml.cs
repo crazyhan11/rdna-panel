@@ -1670,7 +1670,9 @@ namespace RadeonTune
             catch { }
         }
 
-        public void CliApplyMode(int w, int h, int hz) => ApplyMode(w, h, hz);
+        public void CliApplyMode(int w, int h, int hz) { _suppressModeDialog = true; ApplyMode(w, h, hz); }
+
+        private static bool _suppressModeDialog;
 
         private void ApplyMode(int w, int h, int hz)
         {
@@ -1707,6 +1709,7 @@ namespace RadeonTune
             }
 
             Log($"mode: switched={switched} actual={a[0]}x{a[1]}@{a[2]}");
+            if (_suppressModeDialog) { try { System.IO.File.Delete(ModePendingPath); } catch { } BuildDisplay(); return; }
             var dlg = new ModeConfirmDialog(15, $"已切换到 {a[0]}×{a[1]} @ {a[2]} Hz。\n如果不能看到画面或显示异常，等待 15 秒会自动恢复，或点「立即恢复」。")
             { Owner = this };
             bool keep = dlg.ShowDialog() == true;

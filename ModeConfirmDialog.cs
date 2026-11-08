@@ -11,6 +11,21 @@ namespace RadeonTune
     {
         private readonly DispatcherTimer _timer;
         private int _left;
+        private bool _finished;
+
+        /// <summary>安全结束：只有以 ShowDialog 显示且尚未结束时才写 DialogResult。</summary>
+        private void Finish(bool result)
+        {
+            if (_finished) return;
+            _finished = true;
+            _timer.Stop();
+            try
+            {
+                if (IsLoaded && IsVisible) DialogResult = result;
+            }
+            catch (InvalidOperationException) { /* 非模态显示时不允许设置 */ }
+            Close();
+        }
 
         public ModeConfirmDialog(int seconds, string text)
         {
@@ -40,9 +55,9 @@ namespace RadeonTune
             var bar = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
             var keep = new Button { Content = "保留此模式", Width = 110, Height = 30, Margin = new Thickness(0, 0, 8, 0),
                                     Background = new SolidColorBrush(Color.FromRgb(0xD8, 0x1A, 0x1A)), Foreground = Brushes.White, BorderBrush = Brushes.Transparent };
-            keep.Click += (_, __) => { DialogResult = true; Close(); };
+            keep.Click += (_, __) => Finish(true);
             var back = new Button { Content = "立即恢复", Width = 100, Height = 30 };
-            back.Click += (_, __) => { DialogResult = false; Close(); };
+            back.Click += (_, __) => Finish(false);
             bar.Children.Add(keep);
             bar.Children.Add(back);
             root.Children.Add(bar);
@@ -54,12 +69,7 @@ namespace RadeonTune
             {
                 _left--;
                 countdown.Text = $"{_left} 秒后自动恢复原模式";
-                if (_left <= 0)
-                {
-                    _timer.Stop();
-                    DialogResult = false;
-                    Close();
-                }
+                if (_left <= 0) Finish(false);
             };
             _timer.Start();
             Closed += (_, __) => _timer.Stop();
