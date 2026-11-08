@@ -270,13 +270,25 @@ static bool queryOcCaps(OcCaps* out) {
     //  - RDNA2 的默认 max 频率约 2400 MHz、默认电压约 1150 mV，落在绝对量程内；
     //  - RDNA4 的默认值是偏移，通常为 0（或接近 0），且量程跨越 0 / 上限为 0。
     // 优先用驱动默认值判断，默认值不可用时退回量程判断。
-    if (out->maxFreqMax > 0) {
-        if (out->defMaxFreq > 300) out->freqAbsolute = true;
-        else if (out->defMaxFreq == 0 && out->maxFreqMin > 0 && out->maxFreqMin >= 300) out->freqAbsolute = true;
-    }
-    if (out->voltMax > 0) {
-        if (out->defVolt > 300) out->voltAbsolute = true;
-        else if (out->defVolt == 0 && out->voltMin > 0 && out->voltMin >= 300) out->voltAbsolute = true;
+    // Semantics depend on the ASIC generation: RDNA2 = absolute MHz/mV; RDNA3/RDNA4 = offsets.
+    long devId = -1;
+    if (g.gpu) { const char* did = nullptr; g.gpu->DeviceId(&did); if (did) devId = strtol(did, nullptr, 16); }
+    bool knownRdna2 =
+        (devId >= 0x73A0 && devId <= 0x73FF) ||   // Navi 21/22/23
+        (devId >= 0x7420 && devId <= 0x743F) ||   // Navi 24
+        devId == 0x163F || devId == 0x1681 || devId == 0x1506;  // RDNA2 APUs
+    bool rangeSaysOffset = (out->maxFreqMin < 0) || (out->voltMin < 0);
+    if (rangeSaysOffset) { out->freqAbsolute = false; out->voltAbsolute = false; }
+    else if (devId > 0) { out->freqAbsolute = knownRdna2; out->voltAbsolute = knownRdna2; }
+    else {
+        if (out->maxFreqMax > 0) {
+            if (out->defMaxFreq > 300) out->freqAbsolute = true;
+            else if (out->defMaxFreq == 0 && out->maxFreqMin > 0 && out->maxFreqMin >= 300) out->freqAbsolute = true;
+        }
+        if (out->voltMax > 0) {
+            if (out->defVolt > 300) out->voltAbsolute = true;
+            else if (out->defVolt == 0 && out->voltMin > 0 && out->voltMin >= 300) out->voltAbsolute = true;
+        }
     }
     return true;
 }
