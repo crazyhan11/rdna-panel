@@ -684,7 +684,7 @@ namespace RadeonTune
                             tn.Clear().Append(ti == 0 ? "Default" : "Fast Timing");
                         else
                             RtCore.rt_timing_name(ti, tn, tn.Capacity);
-                        timingCombo.Items.Add(tn.ToString());
+                        timingCombo.Items.Add(TimingLabel(tn.ToString()));
                     }
                     int curTiming = RtCore.rt_timing_current_index();
                     timingCombo.SelectedIndex = (curTiming >= 0 && curTiming < timingCount) ? curTiming : 0;
@@ -3560,5 +3560,16 @@ namespace RadeonTune
                 ? $"{key} → {(got == 1 ? "ON" : "OFF")}（回读一致）"
                 : $"{key} 写入失败：{r.Detail}";
         }
+
+        private static string TimingLabel(string en) => en switch
+        {
+            "Default" => "默认",
+            "Fast Timing" => "快定时",
+            "Fast Timing Level 2" => "快定时 2",
+            "Automatic" => "自动",
+            "Memory Timing Level 1" => "时序等级 1",
+            "Memory Timing Level 2" => "时序等级 2",
+            _ => en,
+        };
     }
 }
