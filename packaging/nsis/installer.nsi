@@ -1,7 +1,7 @@
 ﻿; ---- RadeonTune installer (NSIS 3) ----
 Unicode true
 !define APPNAME "RDNA Panel"
-!define VERSION "1.3.0"
+!define VERSION "1.3.0-rdna2"
 Name "${APPNAME} ${VERSION}"
 OutFile "RDNAPanel-Setup-${VERSION}.exe"
 InstallDir "$LOCALAPPDATA\Programs\RDNAPanel"
@@ -21,6 +21,7 @@ UninstallIcon "..\..\app.ico"
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
+!insertmacro MUI_LANGUAGE "SimpChinese"
 !insertmacro MUI_LANGUAGE "English"
 
 Section "Install"
@@ -31,36 +32,25 @@ Section "Install"
   Abort
   MessageBox MB_YESNO|MB_ICONQUESTION "RDNA Panel is already installed at:$\r$\n$0$\r$\n$\r$\nInstall a second copy anyway?" IDYES +2
   Abort
-  FileOpen $9 "$TEMP\nsidbg.txt" w
-  FileWrite $9 "installdir=[$INSTDIR] localappdata=[$LOCALAPPDATA] profile=[$PROFILE]$\r$\n"
-  FileClose $9
   SetShellVarContext current
 
   CreateDirectory "$INSTDIR"
   SetOutPath "$INSTDIR"
   ; 先清掉旧版本的程序文件（保留 data 配置）
   RMDir /r "$INSTDIR\cs"
+  RMDir /r "$INSTDIR\runtimes"
+  RMDir /r "$INSTDIR\assets"
   Delete "$INSTDIR\*.dll"
   Delete "$INSTDIR\RDNAPanel.exe"
   File /r "..\portable\*.*"
-  FileOpen $9 "$TEMP\nsidbg.txt" a
-  FileWrite $9 "files ok$\r$\n"
-  FileClose $9
   ; 保留用户数据
   IfFileExists "$INSTDIR\data\settings.json" +2 0
   CreateDirectory "$INSTDIR\data"
 
   CreateShortcut "$SMPROGRAMS\RDNA Panel.lnk" "$INSTDIR\RDNAPanel.exe" "" "$INSTDIR\RDNAPanel.exe" 0
   CreateShortcut "$DESKTOP\RDNA Panel.lnk" "$INSTDIR\RDNAPanel.exe" "" "$INSTDIR\RDNAPanel.exe" 0
-  FileOpen $9 "$TEMP\nsidbg.txt" a
-  FileWrite $9 "shortcuts ok$\r$\n"
-  FileClose $9
-
   WriteRegStr HKCU "Software\RDNA Panel" "InstallDir" "$INSTDIR"
   WriteUninstaller "$INSTDIR\uninstall.exe"
-  FileOpen $9 "$TEMP\nsidbg.txt" a
-  FileWrite $9 "uninstaller ok$\r$\n"
-  FileClose $9
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RDNA Panel" "DisplayName" "${APPNAME}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RDNA Panel" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RDNA Panel" "Publisher" "RadeonTune"
@@ -73,13 +63,10 @@ SectionEnd
 
 Section "Uninstall"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "RadeonTune"
-  RMDir /r "$INSTDIR\cs"
-  RMDir /r "$INSTDIR\assets"
-  Delete "$INSTDIR\*.dll"
-  Delete "$INSTDIR\uninstall.exe"
-  RMDir "$INSTDIR"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RDNA Panel"
+  DeleteRegKey HKCU "Software\RDNA Panel"
+  DeleteRegKey HKCU "Software\RadeonTune"
   Delete "$SMPROGRAMS\RDNA Panel.lnk"
   Delete "$DESKTOP\RDNA Panel.lnk"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RDNA Panel"
-  DeleteRegKey HKCU "Software\RadeonTune"
+  RMDir /r "$INSTDIR"
 SectionEnd

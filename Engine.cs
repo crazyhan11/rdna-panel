@@ -13,6 +13,7 @@ namespace RadeonTune
         public string Name { get; set; } = "default";
         public Dictionary<string, int> Toggles { get; set; } = new();
         public int FreqOffset { get; set; }
+        public int MinFreq { get; set; }
         public int PowerPct { get; set; }
         public int VoltMv { get; set; }
         public string Process { get; set; } = "";
@@ -91,10 +92,12 @@ namespace RadeonTune
         {
             public string SavedAt { get; set; } = "";
             public int FreqOffset { get; set; }
+            public int MinFreq { get; set; }
             public int VoltMv { get; set; }
             public int PowerPct { get; set; }
             public int FanPct { get; set; }
             public bool HasFan { get; set; }
+            public bool HasMinFreq { get; set; }
         }
 
         private static string RollbackPath => Path.Combine(StoreDir, "rollback.json");
@@ -117,6 +120,12 @@ namespace RadeonTune
                 if (v.Length > 2 && int.TryParse(v[2], out var mv)) st.VoltMv = mv;
             }
             sb.Clear();
+            if (RtCore.rt_oc2_min(sb, sb.Capacity) == 0)
+            {
+                var m = sb.ToString().Split('|');
+                if (m.Length > 2 && int.TryParse(m[2], out var mn)) { st.MinFreq = mn; st.HasMinFreq = true; }
+            }
+            sb.Clear();
             if (RtCore.rt_fan(sb, sb.Capacity) == 0)
             {
                 var fa = sb.ToString().Split('|');
@@ -136,7 +145,8 @@ namespace RadeonTune
             if (RtCore.rt_oc2_set_freq(st.FreqOffset) == 0) ok++; else fail++;
             if (RtCore.rt_oc2_set_volt(st.VoltMv) == 0) ok++; else fail++;
             if (RtCore.rt_oc2_set_power(st.PowerPct) == 0) ok++; else fail++;
-            if (st.HasFan && RtCore.rt_set_fan(st.FanPct) == 0) ok++; else fail++;
+            if (st.HasMinFreq && RtCore.rt_oc2_set_min(st.MinFreq) == 0) ok++; else if (st.HasMinFreq) fail++;
+            if (st.HasFan && RtCore.rt_set_fan(st.FanPct) == 0) ok++; else if (st.HasFan) fail++;
             return fail == 0 ? $"已回退到 {st.SavedAt} 的状态" : $"回退部分失败：成功 {ok}，失败 {fail}";
         }
 
@@ -209,6 +219,9 @@ namespace RadeonTune
             var sbVolt = new StringBuilder(128);
             RtCore.rt_oc2_volt(sbVolt, sbVolt.Capacity);
             var voltBefore = sbVolt.ToString().Split('|');
+            var sbMin = new StringBuilder(64);
+            RtCore.rt_oc2_min(sbMin, sbMin.Capacity);
+            var minBefore = sbMin.ToString().Split('|');
 
             BeginApply(p);
 
@@ -228,16 +241,19 @@ namespace RadeonTune
 
             if (p.HasOc)
             {
+                int rm = 0;
+                if (p.MinFreq > 0) rm = RtCore.rt_oc2_set_min(p.MinFreq);
                 int rf = RtCore.rt_oc2_set_freq(p.FreqOffset);
                 int rp = RtCore.rt_oc2_set_power(p.PowerPct);
                 int rv = RtCore.rt_oc2_set_volt(p.VoltMv);
-                if (rf != 0 || rp != 0 || rv != 0)
+                if (rm != 0 || rf != 0 || rp != 0 || rv != 0)
                 {
+                    if (minBefore.Length > 2) RtCore.rt_oc2_set_min(int.Parse(minBefore[2]));
                     RtCore.rt_oc2_set_freq(int.Parse(ocBefore[2]));
                     RtCore.rt_oc2_set_power(int.Parse(ocBefore[5]));
                     RtCore.rt_oc2_set_volt(int.Parse(voltBefore[2]));
-                    MarkFailed("oc", rf, rp);
-                    return new EngineResult { Ok = false, Action = "failed", Detail = $"freq rc={rf} power rc={rp} volt rc={rv}" };
+                    MarkFailed("oc", rf != 0 ? rf : rp, rp);
+                    return new EngineResult { Ok = false, Action = "failed", Detail = $"freq rc={rf} power rc={rp} volt rc={rv} min rc={rm}" };
                 }
             }
 

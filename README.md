@@ -119,14 +119,23 @@ The native core `rt_core.dll` is built from `RDNA Panel/native/rt_core.cpp` with
 (ADLX SDK headers required and not bundled):
 
 ```
-g++ -std=c++17 -O2 -shared -static -I <ADLX>/Include -I <ADLX>/ADLXHelper/Windows/Cpp `
-  RDNA Panel/native/rt_core.cpp <ADLX>/ADLXHelper.cpp adlx_shim.cpp -o rt_core.dll -ladvapi32
+g++ -std=c++17 -O2 -shared -static -I <ADLX>/SDK/Include -I <ADLX>/SDK/ADLXHelper/Windows/Cpp `
+  native/rt_core.cpp <ADLX>/SDK/ADLXHelper/Windows/Cpp/ADLXHelper.cpp `
+  <ADLX>/SDK/Platform/Windows/WinAPIs.cpp -o rt_core.dll -ladvapi32
+```
+
+Or use the helper script:
+
+```
+powershell -ExecutionPolicy Bypass -File native/build.ps1 -Adlx <ADLX SDK root>
 ```
 
 ## Status
 
-Early but functional. Verified on Radeon RX 9070 (Navi 48) + iGPU. Other RDNA2/3 cards should work
-through the same ADLX interfaces but are untested.
+Early but functional. Verified on Radeon RX 9070 (Navi 48) + iGPU. RDNA2 (RX 6000) is now adapted and
+tested on RX 6800 XT: the same `IADLXManualGraphicsTuning2` interface is used, but clock/voltage are absolute
+values (not RDNA4 offsets) and minimum frequency is exposed. See
+[docs/rdna2-adaptation.md](docs/rdna2-adaptation.md).
 
 ## License
 
@@ -222,14 +231,22 @@ dotnet publish RDNA Panel/RDNA Panel.csproj -c Release -r win-x64 --self-contain
 原生核心 `rt_core.dll` 由 `RDNA Panel/native/rt_core.cpp` 用 mingw-w64 编译（需要 ADLX SDK 头文件，仓库未附带）：
 
 ```
-g++ -std=c++17 -O2 -shared -static -I <ADLX>/Include -I <ADLX>/ADLXHelper/Windows/Cpp `
-  RDNA Panel/native/rt_core.cpp <ADLX>/ADLXHelper.cpp adlx_shim.cpp -o rt_core.dll -ladvapi32
+g++ -std=c++17 -O2 -shared -static -I <ADLX>/SDK/Include -I <ADLX>/SDK/ADLXHelper/Windows/Cpp `
+  native/rt_core.cpp <ADLX>/SDK/ADLXHelper/Windows/Cpp/ADLXHelper.cpp `
+  <ADLX>/SDK/Platform/Windows/WinAPIs.cpp -o rt_core.dll -ladvapi32
+```
+
+或使用脚本：
+
+```
+powershell -ExecutionPolicy Bypass -File native/build.ps1 -Adlx <ADLX SDK 根目录>
 ```
 
 ## 状态
 
-早期但可用。已在 Radeon RX 9070（Navi 48）+ 核显上验证；其他 RDNA2/3 显卡理论上走同一套 ADLX 接口，
-但尚未实机验证。
+早期但可用。已在 Radeon RX 9070（Navi 48）+ 核显上验证。RDNA2（RX 6000）已完成适配，
+在 RX 6800 XT 上实测：同样走 `IADLXManualGraphicsTuning2`，但频率/电压是绝对值（不是 RDNA4 的偏移），
+并额外暴露最低频率。详见 [docs/rdna2-adaptation.md](docs/rdna2-adaptation.md)。
 
 ## 许可证
 

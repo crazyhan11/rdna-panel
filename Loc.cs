@@ -46,6 +46,11 @@ namespace RadeonTune
             ["VRR 状态"] = "VRR status", ["能力别名"] = "Capability aliases",
             ["VRR 等级（EDID 推断）"] = "VRR tier (EDID inference)",
             ["核心频率上限（偏移，相对 3450 MHz 默认）"] = "Core clock limit (offset vs 3450 MHz default)",
+            ["核心频率上限（MHz）"] = "Core clock limit (MHz)",
+            ["核心电压（mV）"] = "Core voltage (mV)",
+            ["最低频率（MHz）"] = "Min clock (MHz)",
+            ["核心频率上限"] = "Core clock limit",
+            ["驱动可调范围（ADLX 只读）"] = "Driver limits (ADLX, read-only)",
             ["功耗上限（%）"] = "Power limit (%)",
             ["风扇曲线（X 温度 °C · Y 转速 %）"] = "Fan curve (X temp °C · Y speed %)",
             ["本卡不支持「最低声学限制 / 最低风扇转速」这两项（ADLX 报告为 unsupported）"] =
