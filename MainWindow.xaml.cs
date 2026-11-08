@@ -678,7 +678,7 @@ namespace RadeonTune
                     FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Width = 120,
                 });
                 var timingCombo = new ComboBox { Width = 200, Height = 28, IsEnabled = timingSupported && !App.MockVramOc };
-                string[] timingNames = { "默认", "快定时", "快定时 2", "自动" };
+                string[] timingNames = { "默认", "快定时" };
                 for (int ti = 0; ti < timingNames.Length; ti++) timingCombo.Items.Add(timingNames[ti]);
                 if (timingCur >= 0 && timingCur < timingNames.Length) timingCombo.SelectedIndex = timingCur;
                 if (App.MockVramOc) timingCombo.SelectedIndex = 0;
@@ -2330,6 +2330,13 @@ namespace RadeonTune
                     p.FreqOffset = int.Parse(f[2]);
                     p.PowerPct = int.Parse(f[5]);
                     p.HasOc = true;
+            var ti = new StringBuilder(64);
+            if (RtCore.rt_timing_info(ti, ti.Capacity) == 0)
+            {
+                var tv = ti.ToString().Split('|');
+                if (tv.Length > 2 && tv[0] == "1" && tv[1] == "1" && int.TryParse(tv[2], out var tdesc) && tdesc >= 0)
+                { p.TimingDesc = tdesc; p.HasTiming = true; }
+            }
             var vr = new StringBuilder(64);
             if (RtCore.rt_vram_oc_info(vr, vr.Capacity) == 0)
             {
