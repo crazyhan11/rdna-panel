@@ -627,6 +627,62 @@ namespace RadeonTune
                                        TickFrequency = 5, Margin = new Thickness(0, 2, 0, 10) };
             _voltSlider.ValueChanged += (_, __) => UpdateOcText();
             OcHost.Children.Add(_voltSlider);
+            // ---------------- 显存超频（RDNA2 允许；RDNA3+ 禁止）----------------
+            var vinfo = new StringBuilder(128);
+            RtCore.rt_vram_oc_info(vinfo, vinfo.Capacity);
+            var vf = vinfo.ToString().Split('|');
+            bool vramAllowed = vf.Length > 0 && vf[0] == "1";
+            int vmin = vf.Length > 1 && int.TryParse(vf[1], out var vm1) ? vm1 : 0;
+            int vmax = vf.Length > 2 && int.TryParse(vf[2], out var vm2) ? vm2 : 0;
+            int vcur = vf.Length > 3 && int.TryParse(vf[3], out var vm3) ? vm3 : 0;
+
+            OcHost.Children.Add(new TextBlock
+            {
+                Text = Loc.T("显存频率上限（MHz）"), Foreground = (Brush)FindResource("Text"),
+                FontSize = 12, Margin = new Thickness(0, 16, 0, 2),
+            });
+
+            if (vramAllowed || App.MockVramOc)
+            {
+                if (App.MockVramOc && !vramAllowed) { vmin = 1000; vmax = 3000; vcur = 2500; }
+                var vtext = new TextBlock
+                {
+                    Text = $"{vcur} MHz", Foreground = new SolidColorBrush(Color.FromRgb(0xD8, 0x1A, 0x1A)),
+                    FontSize = 12, FontFamily = new FontFamily("Consolas"),
+                };
+                OcHost.Children.Add(vtext);
+                var vslider = new Slider
+                {
+                    Minimum = vmin, Maximum = vmax, TickFrequency = 10, IsSnapToTickEnabled = true,
+                    Value = vcur, IsEnabled = !App.MockVramOc,
+                };
+                vslider.ValueChanged += (_, __) => vtext.Text = $"{(int)vslider.Value} MHz";
+                vslider.PreviewMouseLeftButtonUp += (_, __) =>
+                {
+                    int rc = RtCore.rt_set_vram_oc((int)vslider.Value);
+                    if (StatusText != null)
+                        StatusText.Text = rc == 0 ? $"显存上限已设为 {(int)vslider.Value} MHz"
+                                                  : (rc == -403 ? "该显卡禁止显存超频（RDNA3+）" : $"显存写入失败 rc={rc}");
+                };
+                OcHost.Children.Add(vslider);
+                if (App.MockVramOc)
+                    OcHost.Children.Add(new TextBlock
+                    {
+                        Text = "（预览模式：本机为 RDNA3/4，实际写入会被原生核心拒绝 -403）",
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x8E, 0x8E, 0x93)),
+                        FontSize = 11, Margin = new Thickness(0, 4, 0, 0),
+                    });
+            }
+            else
+            {
+                OcHost.Children.Add(new TextBlock
+                {
+                    Text = "该显卡为 RDNA3 / RDNA4，显存超频已禁用（UCLK 切换 + 防掉压导致掉显示）",
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x8E, 0x8E, 0x93)),
+                    FontSize = 11, TextWrapping = TextWrapping.Wrap,
+                });
+            }
+
 
             OcHost.Children.Add(BuildFanCurveEditor());
 
@@ -655,7 +711,8 @@ namespace RadeonTune
                 }
             }
                     Loc.Apply(this);
-        }
+        
+}
 
         private bool _forceClose;
         private System.Windows.Threading.DispatcherTimer _statusClearTimer;
@@ -2244,6 +2301,14 @@ namespace RadeonTune
                     p.FreqOffset = int.Parse(f[2]);
                     p.PowerPct = int.Parse(f[5]);
                     p.HasOc = true;
+            var vr = new StringBuilder(64);
+            if (RtCore.rt_vram_oc_info(vr, vr.Capacity) == 0)
+            {
+                var vv = vr.ToString().Split('|');
+                if (vv.Length == 4 && vv[0] == "1" && int.TryParse(vv[3], out var vmhz) && vmhz > 0)
+                { p.VramMhz = vmhz; p.HasVram = true; }
+            }
+
                 }
             }
             var sv = new StringBuilder(64);

@@ -18,6 +18,8 @@ namespace RadeonTune
         public int VoltMv { get; set; }
         public string Process { get; set; } = "";
         public int FanPct { get; set; }
+            public int VramMhz { get; set; }
+            public bool HasVram { get; set; }
         public string FanCurve { get; set; } = "";
         public bool AutoApply { get; set; }
         public bool HasOc { get; set; }
@@ -97,6 +99,8 @@ namespace RadeonTune
             public int PowerPct { get; set; }
             public int FanPct { get; set; }
             public bool HasFan { get; set; }
+            public int VramMhz { get; set; }
+            public bool HasVram { get; set; }
             public bool HasMinFreq { get; set; }
         }
 
@@ -130,6 +134,13 @@ namespace RadeonTune
             {
                 var fa = sb.ToString().Split('|');
                 if (fa.Length > 2 && int.TryParse(fa[2], out var fp)) { st.FanPct = fp; st.HasFan = true; }
+            var vr = new StringBuilder(64);
+            if (RtCore.rt_vram_oc_info(vr, vr.Capacity) == 0)
+            {
+                var vv = vr.ToString().Split('|');
+                if (vv.Length == 4 && vv[0] == "1" && int.TryParse(vv[3], out var vmhz) && vmhz > 0)
+                { st.VramMhz = vmhz; st.HasVram = true; }
+            }
             }
             return st;
         }
@@ -147,6 +158,7 @@ namespace RadeonTune
             if (RtCore.rt_oc2_set_power(st.PowerPct) == 0) ok++; else fail++;
             if (st.HasMinFreq && RtCore.rt_oc2_set_min(st.MinFreq) == 0) ok++; else if (st.HasMinFreq) fail++;
             if (st.HasFan && RtCore.rt_set_fan(st.FanPct) == 0) ok++; else if (st.HasFan) fail++;
+            if (st.HasVram && RtCore.rt_set_vram_oc(st.VramMhz) == 0) ok++; else if (st.HasVram) fail++;
             return fail == 0 ? $"已回退到 {st.SavedAt} 的状态" : $"回退部分失败：成功 {ok}，失败 {fail}";
         }
 
@@ -235,6 +247,7 @@ namespace RadeonTune
                     MarkFailed(kv.Key, rc, back);
                     if (!string.IsNullOrEmpty(p.FanCurve)) RtCore.rt_set_fan_curve(p.FanCurve);
             else if (p.FanPct > 0) RtCore.rt_set_fan(p.FanPct);
+            if (p.HasVram && p.VramMhz > 0) { var vr2 = new StringBuilder(64); RtCore.rt_vram_oc_info(vr2, vr2.Capacity); if (vr2.ToString().StartsWith("1|")) RtCore.rt_set_vram_oc(p.VramMhz); }
             return new EngineResult { Ok = false, Action = "failed", Detail = $"{kv.Key} rc={rc} back={back}" };
                 }
             }

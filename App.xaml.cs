@@ -24,6 +24,8 @@ namespace RadeonTune
         private static System.Threading.Mutex _single;
 
         public static bool StartMinimized = false;
+        /// <summary>调试：在非 RDNA2 上也渲染显存超频 UI（不会真正写入）。</summary>
+        public static bool MockVramOc = false;
 
 
         [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
@@ -462,6 +464,7 @@ namespace RadeonTune
             }
             catch { }
             if (Array.IndexOf(e.Args, "--minimized") >= 0) StartMinimized = true;
+            if (Array.IndexOf(e.Args, "--mock-vram") >= 0) MockVramOc = true;
             {
                 var ai = Array.IndexOf(e.Args, "--autostart");
                 if (ai >= 0)
