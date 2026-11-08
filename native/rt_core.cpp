@@ -1455,3 +1455,87 @@ RT_API int rt_timing_set(int desc) {
     v->Release();
     return rc == ADLX_OK ? 0 : (int)rc;
 }
+
+// 显存时序：按驱动实际支持的列表枚举（官方 sample 用法）
+static const char* timingName(int d) {
+    switch (d) {
+    case MEMORYTIMING_DEFAULT: return "Default";
+    case MEMORYTIMING_FAST_TIMING: return "Fast Timing";
+    case MEMORYTIMING_FAST_TIMING_LEVEL_2: return "Fast Timing Level 2";
+    case MEMORYTIMING_AUTOMATIC: return "Automatic";
+    case MEMORYTIMING_MEMORYTIMING_LEVEL_1: return "Memory Timing Level 1";
+    case MEMORYTIMING_MEMORYTIMING_LEVEL_2: return "Memory Timing Level 2";
+    default: return "?";
+    }
+}
+
+static bool timingList(IADLXManualVRAMTuning1* v, std::vector<int>* out, int* current) {
+    if (!v) return false;
+    adlx_bool sup = false;
+    if (v->IsSupportedMemoryTiming(&sup) != ADLX_OK || !sup) return false;
+    IADLXMemoryTimingDescriptionList* list = nullptr;
+    if (v->GetSupportedMemoryTimingDescriptionList(&list) != ADLX_OK || !list) return false;
+    if (out) {
+        for (adlx_uint i = 0; i != list->End(); i++) {
+            IADLXMemoryTimingDescription* item = nullptr;
+            if (list->At(i, &item) == ADLX_OK && item) {
+                ADLX_MEMORYTIMING_DESCRIPTION d = MEMORYTIMING_DEFAULT;
+                if (item->GetDescription(&d) == ADLX_OK) out->push_back((int)d);
+                item->Release();
+            }
+        }
+    }
+    if (current) {
+        ADLX_MEMORYTIMING_DESCRIPTION cur = MEMORYTIMING_DEFAULT;
+        if (v->GetMemoryTimingDescription(&cur) == ADLX_OK) *current = (int)cur;
+    }
+    list->Release();
+    return true;
+}
+
+RT_API int rt_timing_count(void) {
+    if (!ensureInit() || !isRdna2()) return 0;
+    IADLXManualVRAMTuning1* v = getVram1();
+    if (!v) return 0;
+    std::vector<int> items;
+    bool ok = timingList(v, &items, nullptr);
+    v->Release();
+    return ok ? (int)items.size() : 0;
+}
+
+RT_API int rt_timing_name(int idx, char* buf, int len) {
+    if (!buf || len <= 0) return -1;
+    if (!ensureInit() || !isRdna2()) return -403;
+    IADLXManualVRAMTuning1* v = getVram1();
+    if (!v) return -404;
+    std::vector<int> items;
+    bool ok = timingList(v, &items, nullptr);
+    v->Release();
+    if (!ok || idx < 0 || idx >= (int)items.size()) return -3;
+    snprintf(buf, (size_t)len, "%s", timingName(items[idx]));
+    return 0;
+}
+
+RT_API int rt_timing_current_index(void) {
+    if (!ensureInit() || !isRdna2()) return -403;
+    IADLXManualVRAMTuning1* v = getVram1();
+    if (!v) return -404;
+    std::vector<int> items; int cur = -1;
+    bool ok = timingList(v, &items, &cur);
+    v->Release();
+    if (!ok) return -1;
+    for (size_t i = 0; i < items.size(); i++) if (items[i] == cur) return (int)i;
+    return -1;
+}
+
+RT_API int rt_timing_set_index(int idx) {
+    if (!ensureInit() || !isRdna2()) return -403;
+    IADLXManualVRAMTuning1* v = getVram1();
+    if (!v) return -404;
+    std::vector<int> items;
+    bool ok = timingList(v, &items, nullptr);
+    if (!ok || idx < 0 || idx >= (int)items.size()) { v->Release(); return -3; }
+    ADLX_RESULT rc = v->SetMemoryTimingDescription((ADLX_MEMORYTIMING_DESCRIPTION)items[idx]);
+    v->Release();
+    return rc == ADLX_OK ? 0 : (int)rc;
+}

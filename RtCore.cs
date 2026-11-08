@@ -51,6 +51,18 @@ namespace RadeonTune
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern int rt_timing_set(int desc);
 
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int rt_timing_count();
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern int rt_timing_name(int idx, StringBuilder buf, int len);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int rt_timing_current_index();
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int rt_timing_set_index(int idx);
+
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern int rt_disp_name(int idx, StringBuilder buf, int len);
 

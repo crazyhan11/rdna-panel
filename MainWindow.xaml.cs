@@ -665,34 +665,41 @@ namespace RadeonTune
                                                   : (rc == -403 ? "该显卡禁止显存超频（RDNA3+）" : $"显存写入失败 rc={rc}");
                 };
                 OcHost.Children.Add(vslider);
-                // 显存时序（快定时）：RDNA2
-                var tinfo = new StringBuilder(64);
-                RtCore.rt_timing_info(tinfo, tinfo.Capacity);
-                var tf2 = tinfo.ToString().Split('|');
-                bool timingSupported = tf2.Length > 1 && tf2[1] == "1";
-                int timingCur = tf2.Length > 2 && int.TryParse(tf2[2], out var tc) ? tc : 0;
-                var timingRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
-                timingRow.Children.Add(new TextBlock
+                // 显存时序：按驱动支持的列表枚举（Default / Fast Timing / Level 1-2 / Automatic）
+                int timingCount = RtCore.rt_timing_count();
+                if (App.MockVramOc && timingCount <= 0) timingCount = 2;
+                if (timingCount > 0)
                 {
-                    Text = Loc.T("显存时序"), Foreground = (SolidColorBrush)FindResource("Text"),
-                    FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Width = 120,
-                });
-                var timingCombo = new ComboBox { Width = 200, Height = 28, IsEnabled = timingSupported && !App.MockVramOc };
-                string[] timingNames = { "默认", "快定时" };
-                for (int ti = 0; ti < timingNames.Length; ti++) timingCombo.Items.Add(timingNames[ti]);
-                if (timingCur >= 0 && timingCur < timingNames.Length) timingCombo.SelectedIndex = timingCur;
-                if (App.MockVramOc) timingCombo.SelectedIndex = 0;
-                timingCombo.SelectionChanged += (_, __) =>
-                {
-                    int idx2 = timingCombo.SelectedIndex;
-                    if (idx2 < 0) return;
-                    int rc2 = RtCore.rt_timing_set(idx2);
-                    if (StatusText != null)
-                        StatusText.Text = rc2 == 0 ? $"显存时序已设为 {timingNames[idx2]}"
-                                                   : (rc2 == -403 ? "该显卡禁止显存时序调整（RDNA3+）" : $"时序写入失败 rc={rc2}");
-                };
-                timingRow.Children.Add(timingCombo);
-                OcHost.Children.Add(timingRow);
+                    var timingRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+                    timingRow.Children.Add(new TextBlock
+                    {
+                        Text = Loc.T("显存时序"), Foreground = (SolidColorBrush)FindResource("Text"),
+                        FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Width = 120,
+                    });
+                    var timingCombo = new ComboBox { Width = 200, Height = 28, IsEnabled = !App.MockVramOc };
+                    for (int ti = 0; ti < timingCount; ti++)
+                    {
+                        var tn = new StringBuilder(64);
+                        if (App.MockVramOc && RtCore.rt_timing_name(ti, tn, tn.Capacity) != 0)
+                            tn.Clear().Append(ti == 0 ? "Default" : "Fast Timing");
+                        else
+                            RtCore.rt_timing_name(ti, tn, tn.Capacity);
+                        timingCombo.Items.Add(tn.ToString());
+                    }
+                    int curTiming = RtCore.rt_timing_current_index();
+                    timingCombo.SelectedIndex = (curTiming >= 0 && curTiming < timingCount) ? curTiming : 0;
+                    timingCombo.SelectionChanged += (_, __) =>
+                    {
+                        int idx2 = timingCombo.SelectedIndex;
+                        if (idx2 < 0) return;
+                        int rc2 = RtCore.rt_timing_set_index(idx2);
+                        if (StatusText != null)
+                            StatusText.Text = rc2 == 0 ? $"显存时序已设为 {timingCombo.Items[idx2]}"
+                                                       : (rc2 == -403 ? "该显卡禁止显存时序调整（RDNA3+）" : $"时序写入失败 rc={rc2}");
+                    };
+                    timingRow.Children.Add(timingCombo);
+                    OcHost.Children.Add(timingRow);
+                }
 
                 if (App.MockVramOc)
                     OcHost.Children.Add(new TextBlock
