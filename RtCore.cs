@@ -37,6 +37,15 @@ namespace RadeonTune
         public static extern int rt_gpu_count();
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int rt_disp_count();
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern int rt_disp_name(int idx, StringBuilder buf, int len);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int rt_disp_select(int idx);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern int rt_mon_at(int idx, StringBuilder buf, int len);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]

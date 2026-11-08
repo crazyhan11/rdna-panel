@@ -1385,6 +1385,46 @@ namespace RadeonTune
             DisplayHost.Children.Clear();
             _displayRows.Clear();
 
+            // 多屏：先应用已选显示器，再读状态
+            var dcfg = Autostart.Load();
+            int dispCount = 0;
+            try { dispCount = RtCore.rt_disp_count(); } catch { }
+            int dispSel = dcfg.DisplayIndex;
+            if (dispCount > 0 && (dispSel < 0 || dispSel >= dispCount)) dispSel = 0;
+            if (dispCount > 0 && dispSel != dcfg.DisplayIndex)
+            {
+                var c0 = Autostart.Load(); c0.DisplayIndex = dispSel; Autostart.Save(c0);
+            }
+            if (dispCount > 0) try { RtCore.rt_disp_select(dispSel); } catch { }
+
+            if (dispCount > 1)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 4) };
+                row.Children.Add(new TextBlock
+                {
+                    Text = "显示器", Foreground = new SolidColorBrush(Color.FromRgb(0x8E, 0x8E, 0x93)),
+                    FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Width = 120,
+                });
+                var dispCombo = new ComboBox { Width = 240, Height = 28, VerticalContentAlignment = VerticalAlignment.Center };
+                for (int i = 0; i < dispCount; i++)
+                {
+                    var nb = new StringBuilder(128);
+                    RtCore.rt_disp_name(i, nb, nb.Capacity);
+                    dispCombo.Items.Add(nb.ToString());
+                }
+                dispCombo.SelectedIndex = dispSel;
+                dispCombo.SelectionChanged += (_, __) =>
+                {
+                    int idx = dispCombo.SelectedIndex;
+                    if (idx < 0) return;
+                    var c1 = Autostart.Load(); c1.DisplayIndex = idx; Autostart.Save(c1);
+                    RtCore.rt_disp_select(idx);
+                    BuildDisplay();
+                };
+                row.Children.Add(dispCombo);
+                DisplayHost.Children.Add(row);
+            }
+
             // 读取当前状态（快速，且都在 RT 内完成）
             var mode = new StringBuilder(64); RtCore.rt_mode(mode, mode.Capacity);
             var bpc = new StringBuilder(64); RtCore.rt_bpc(bpc, bpc.Capacity);

@@ -269,13 +269,36 @@ static bool queryOcCaps(OcCaps* out) {
     //  - RDNA2 的默认 max 频率约 2400 MHz、默认电压约 1150 mV，落在绝对量程内；
     //  - RDNA4 的默认值是偏移，通常为 0（或接近 0），且量程跨越 0 / 上限为 0。
     // 优先用驱动默认值判断，默认值不可用时退回量程判断。
-    if (out->maxFreqMax > 0) {
-        if (out->defMaxFreq > 300) out->freqAbsolute = true;
-        else if (out->defMaxFreq == 0 && out->maxFreqMin > 0 && out->maxFreqMin >= 300) out->freqAbsolute = true;
+    // Semantics depend on the ASIC generation, not on the interface version:
+    //   RDNA2 (Navi 21/22/23/24 and RDNA2 APUs): absolute MHz / mV
+    //   RDNA3 and RDNA4: offsets from the default value
+    // A negative minimum in either range is a reliable offset marker (absolute values are never negative).
+    long devId = -1;
+    if (g.gpu) {
+        const char* did = nullptr;
+        g.gpu->DeviceId(&did);
+        if (did) devId = strtol(did, nullptr, 16);
     }
-    if (out->voltMax > 0) {
-        if (out->defVolt > 300) out->voltAbsolute = true;
-        else if (out->defVolt == 0 && out->voltMin > 0 && out->voltMin >= 300) out->voltAbsolute = true;
+    bool knownRdna2 =
+        (devId >= 0x73A0 && devId <= 0x73FF) ||   // Navi 21 / 22 / 23
+        (devId >= 0x7420 && devId <= 0x743F) ||   // Navi 24 (RX 6400 / 6500 XT)
+        devId == 0x163F || devId == 0x1681 || devId == 0x1506;  // Van Gogh / Rembrandt / Mendocino
+    bool rangeSaysOffset = (out->maxFreqMin < 0) || (out->voltMin < 0);
+    if (rangeSaysOffset) {
+        out->freqAbsolute = false;
+        out->voltAbsolute = false;
+    } else if (devId > 0) {
+        out->freqAbsolute = knownRdna2;
+        out->voltAbsolute = knownRdna2;
+    } else {
+        if (out->maxFreqMax > 0) {
+            if (out->defMaxFreq > 300) out->freqAbsolute = true;
+            else if (out->defMaxFreq == 0 && out->maxFreqMin > 0 && out->maxFreqMin >= 300) out->freqAbsolute = true;
+        }
+        if (out->voltMax > 0) {
+            if (out->defVolt > 300) out->voltAbsolute = true;
+            else if (out->defVolt == 0 && out->voltMin > 0 && out->voltMin >= 300) out->voltAbsolute = true;
+        }
     }
     return true;
 }
@@ -1318,5 +1341,41 @@ RT_API int rt_mon_at(int idx, char* buf, int len) {
     snprintf(buf, (size_t)len, "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
              (int)clock, (int)vram, (int)temp, (int)memTemp, (int)volt, (int)hot,
              (int)fan, (int)fan, (int)(board > 0 ? board : power), (int)usage, 0);
+    return 0;
+}
+
+// ---------------- 显示器枚举（诊断/多屏支持） ----------------
+RT_API int rt_disp_count(void) {
+    if (!ensureInit() || !g.dsp) return -1;
+    IADLXDisplayList* dl = nullptr;
+    if (g.dsp->GetDisplays(&dl) != ADLX_OK || !dl) return -2;
+    int n = (int)dl->Size();
+    dl->Release();
+    return n;
+}
+
+RT_API int rt_disp_name(int idx, char* buf, int len) {
+    if (!buf || len <= 0) return -1;
+    if (!ensureInit() || !g.dsp) return -2;
+    IADLXDisplayList* dl = nullptr;
+    if (g.dsp->GetDisplays(&dl) != ADLX_OK || !dl) return -2;
+    if (idx < 0 || (adlx_uint)idx >= dl->Size()) { dl->Release(); return -3; }
+    IADLXDisplay* d = nullptr;
+    if (dl->At((adlx_uint)idx, &d) != ADLX_OK || !d) { dl->Release(); return -3; }
+    const char* nm = nullptr; d->Name(&nm);
+    snprintf(buf, (size_t)len, "%s", nm ? nm : "?");
+    d->Release(); dl->Release();
+    return 0;
+}
+
+RT_API int rt_disp_select(int idx) {
+    if (!ensureInit() || !g.dsp) return -2;
+    IADLXDisplayList* dl = nullptr;
+    if (g.dsp->GetDisplays(&dl) != ADLX_OK || !dl) return -2;
+    if (idx < 0 || (adlx_uint)idx >= dl->Size()) { dl->Release(); return -3; }
+    IADLXDisplay* d = nullptr;
+    if (dl->At((adlx_uint)idx, &d) != ADLX_OK || !d) { dl->Release(); return -3; }
+    if (g.disp) g.disp->Release();
+    g.disp = d; dl->Release();
     return 0;
 }
