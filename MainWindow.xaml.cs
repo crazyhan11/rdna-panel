@@ -3419,6 +3419,20 @@ namespace RadeonTune
                 return;
             }
 
+            // 先应用已保存的显示器，再做任何显示相关读取（FreeSync/VSR/位深都依赖 g.disp）
+            try
+            {
+                var dcfg0 = Autostart.Load();
+                int dn0 = RtCore.rt_disp_count();
+                if (dn0 > 0)
+                {
+                    int di0 = dcfg0.DisplayIndex;
+                    if (di0 < 0 || di0 >= dn0) di0 = 0;
+                    RtCore.rt_disp_select(di0);
+                }
+            }
+            catch { }
+
             var (values, gpu, disp) = await Task.Run(() =>
             {
                 var d = new Dictionary<string, int>();

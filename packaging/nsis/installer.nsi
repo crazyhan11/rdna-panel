@@ -4,7 +4,7 @@ Unicode true
 !define VERSION "1.3.3"
 Name "${APPNAME} ${VERSION}"
 OutFile "RDNAPanel-Setup-1.3.3.exe"
-InstallDir "$LOCALAPPDATA\Programs\RDNAPanel"
+InstallDir "$LOCALAPPDATA\Programs\RDNA Panel"
 InstallDirRegKey HKCU "Software\RDNA Panel" "InstallDir"
 RequestExecutionLevel user
 SetCompressor zlib
