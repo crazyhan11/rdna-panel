@@ -506,7 +506,7 @@ namespace RadeonTune
                     int rr = RtCore.rt_rsr_sharp2(rb, rb.Capacity);
                     var rv = rb.ToString().Split('|');
                     int stored = rv.Length > 2 && int.TryParse(rv[2], out var st) ? st : 0;
-                    AddSubSlider("RSR 锐化", 0, 100, 10, stored * 10, v =>
+                    AddSubSlider("RSR 锐化", 0, 100, 10, stored, v =>
                     {
                         int rc = RtCore.rt_set_rsr_sharp(v);
                         if (rc != 0 && StatusText != null) StatusText.Text = $"RSR 锐化写入失败 rc={rc}";

@@ -1050,7 +1050,7 @@ RT_API int rt_rsr_sharp2(char* buf, int len) {
     }
     f->Release();
     if (rs != ADLX_OK) return -100 + (int)rs;
-    snprintf(buf, (size_t)len, "%d|%d|%d", (int)sup, (int)en, (int)(cur / 10));
+    snprintf(buf, (size_t)len, "%d|%d|%d", (int)sup, (int)en, (int)cur);
     return 0;
 }
 
@@ -1061,7 +1061,7 @@ RT_API int rt_set_rsr_sharp(int v) {
     f->IsSupported(&sup);
     if (!sup) { f->Release(); return -3; }
     ADLX_IntRange r{};
-    int value = v * 10;
+    int value = v;
     if (f->GetSharpnessRange(&r) == ADLX_OK) {
         if (value < (int)r.minValue) value = (int)r.minValue;
         if (value > (int)r.maxValue) value = (int)r.maxValue;
