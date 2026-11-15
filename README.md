@@ -101,7 +101,7 @@ actually use, and the machine stays free of the panel's Explorer coupling.
 
 ### Portable
 
-1. Download `RDNA Panel-v1.2.6-portable-win-x64.zip` and extract anywhere.
+1. Download the portable zip from the [latest release](https://github.com/crazyhan11/rdna-panel/releases/latest) and extract anywhere.
 2. Run `RDNA Panel.exe`. Settings live in `data\settings.json` next to the executable.
 
 Requirements: Windows 10/11 x64, an AMD Radeon GPU with a recent Adrenalin driver.
@@ -219,7 +219,7 @@ RDNA Panel 绕开这两个失效点（完整分析与「观察/推理」的区�
 
 ### 便携版
 
-1. 下载 `RDNA Panel-v1.2.6-portable-win-x64.zip` 解压到任意目录；
+1. 从 [最新 Release](https://github.com/crazyhan11/rdna-panel/releases/latest) 下载 portable 压缩包，解压到任意目录；
 2. 运行 `RDNA Panel.exe`，配置保存在同目录 `data\settings.json`。
 
 环境要求：Windows 10/11 x64、AMD Radeon 显卡 + 较新的 Adrenalin 驱动。自带运行时，无需另装 .NET。
