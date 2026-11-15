@@ -510,7 +510,7 @@ namespace RadeonTune
                     {
                         int rc = RtCore.rt_set_rsr_sharp(v);
                         if (rc != 0 && StatusText != null) StatusText.Text = $"RSR 锐化写入失败 rc={rc}";
-                    }, "RSR 锐化强度：0–100%，按 10 递增；由 ADL RSR Sharpening Strength 控制。");
+                    }, "RSR 锐化强度：0–100%，按 10 递增；由 ADLX RSR Sharpness 控制。");
                     if (rr != 0 && StatusText != null) StatusText.Text = "RSR 锐化读取失败 rc=" + rr;
                 }
 

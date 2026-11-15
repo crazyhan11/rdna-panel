@@ -51,13 +51,13 @@ struct State {
     char err[256] = {0};
 };
 State g;
+ADLXHelper g_helper;
 }
 
 static bool ensureInit() {
     if (g.ready) return true;
-    static ADLXHelper helper;
-    if (helper.Initialize() != ADLX_OK) { strcpy_s(g.err, "ADLX init failed"); return false; }
-    g.sys = helper.GetSystemServices();
+    if (g_helper.Initialize() != ADLX_OK) { strcpy_s(g.err, "ADLX init failed"); return false; }
+    g.sys = g_helper.GetSystemServices();
     if (!g.sys) { strcpy_s(g.err, "no system services"); return false; }
     IADLXGPUList* gpus = nullptr;
     if (g.sys->GetGPUs(&gpus) != ADLX_OK || !gpus || gpus->Size() == 0) { strcpy_s(g.err, "no GPU"); return false; }
@@ -464,35 +464,80 @@ RT_API const char* rt_toggle_name(int i) {
 RT_API int rt_freesync(char* buf, int len);
 RT_API int rt_set_freesync(int on);
 
-RT_API int rt_toggle_get(const char* name) {
-    if (!strcmp(name, "freesync")) {
-        char b[64]; if (rt_freesync(b, sizeof(b)) != 0) return -1;
-        return b[0] == '1' ? 1 : 0;
+// 3D 特性按 key 分派到各自接口类型：绝不跨接口强转（vtable 槽位不同）
+#define RT_T3D_GET(KEY, TYPE, GETEXPR) \
+    if (!strcmp(name, KEY)) { \
+        TYPE* f = nullptr; \
+        if (!(GETEXPR) || !f) return -3; \
+        ADLX_RESULT rs = f->IsSupported(sup); \
+        if (rs == ADLX_OK && *sup && on) rs = f->IsEnabled(on); \
+        f->Release(); \
+        return rs == ADLX_OK ? 0 : -100 + (int)rs; \
     }
-    auto* itf = feature3D(name);
-    if (!itf) return -1;
-    adlx_bool en = false;
-    auto* base = (IADLX3DAntiLag*)itf;   // 各接口前三个方法布局一致：IsSupported/GetEnabled/SetEnabled
-    if (base->IsSupported(&en) != ADLX_OK) { itf->Release(); return -1; }
-    if (!en) { itf->Release(); return -2; }
-    adlx_bool on = false;
-    base->IsEnabled(&on);
-    itf->Release();
+
+#define RT_T3D_SET(KEY, TYPE, GETEXPR) \
+    if (!strcmp(name, KEY)) { \
+        TYPE* f = nullptr; \
+        if (!(GETEXPR) || !f) return -3; \
+        adlx_bool sup = false; \
+        ADLX_RESULT rs = f->IsSupported(&sup); \
+        if (rs != ADLX_OK || !sup) { f->Release(); return -2; } \
+        rs = f->SetEnabled(value != 0); \
+        f->Release(); \
+        return rs == ADLX_OK ? 0 : -100 + (int)rs; \
+    }
+
+static int toggleQuery(const char* name, adlx_bool* sup, adlx_bool* on) {
+    if (!ensureInit()) return -1;
+    if (!strcmp(name, "freesync")) {
+        if (!g.dsp || !g.disp) return -3;
+        IADLXDisplayFreeSync* f = nullptr;
+        if (g.dsp->GetFreeSync(g.disp, &f) != ADLX_OK || !f) return -3;
+        ADLX_RESULT rs = f->IsSupported(sup);
+        if (rs == ADLX_OK && *sup && on) rs = f->IsEnabled(on);
+        f->Release();
+        return rs == ADLX_OK ? 0 : -100 + (int)rs;
+    }
+    RT_T3D_GET("antilag", IADLX3DAntiLag, g.d3d && g.d3d->GetAntiLag(g.gpu, &f) == ADLX_OK)
+    RT_T3D_GET("chill", IADLX3DChill, g.d3d && g.d3d->GetChill(g.gpu, &f) == ADLX_OK)
+    RT_T3D_GET("boost", IADLX3DBoost, g.d3d && g.d3d->GetBoost(g.gpu, &f) == ADLX_OK)
+    RT_T3D_GET("frtc", IADLX3DFrameRateTargetControl, g.d3d && g.d3d->GetFrameRateTargetControl(g.gpu, &f) == ADLX_OK)
+    RT_T3D_GET("ris2", IADLX3DImageSharpening, g.d3d && g.d3d->GetImageSharpening(g.gpu, &f) == ADLX_OK)
+    RT_T3D_GET("ensync", IADLX3DEnhancedSync, g.d3d && g.d3d->GetEnhancedSync(g.gpu, &f) == ADLX_OK)
+    RT_T3D_GET("rsr", IADLX3DRadeonSuperResolution, g.d3d3 && g.d3d3->GetRadeonSuperResolution(&f) == ADLX_OK)
+    RT_T3D_GET("fsr", IADLX3DFidelityFXSuperResolution, g.d3d3 && g.d3d3->GetFidelityFXSuperResolution(g.gpu, &f) == ADLX_OK)
+    RT_T3D_GET("fg", IADLX3DFidelityFXFrameGenUpgrade, g.d3d3 && g.d3d3->GetFidelityFXFrameGenUpgrade(g.gpu, &f) == ADLX_OK)
+    RT_T3D_GET("afmf", IADLX3DAMDFluidMotionFrames, g.d3d1 && g.d3d1->GetAMDFluidMotionFrames(&f) == ADLX_OK)
+    return -3;
+}
+
+static int toggleApply(const char* name, int value) {
+    if (!ensureInit()) return -1;
+    if (!strcmp(name, "freesync")) return rt_set_freesync(value);
+    RT_T3D_SET("antilag", IADLX3DAntiLag, g.d3d && g.d3d->GetAntiLag(g.gpu, &f) == ADLX_OK)
+    RT_T3D_SET("chill", IADLX3DChill, g.d3d && g.d3d->GetChill(g.gpu, &f) == ADLX_OK)
+    RT_T3D_SET("boost", IADLX3DBoost, g.d3d && g.d3d->GetBoost(g.gpu, &f) == ADLX_OK)
+    RT_T3D_SET("frtc", IADLX3DFrameRateTargetControl, g.d3d && g.d3d->GetFrameRateTargetControl(g.gpu, &f) == ADLX_OK)
+    RT_T3D_SET("ris2", IADLX3DImageSharpening, g.d3d && g.d3d->GetImageSharpening(g.gpu, &f) == ADLX_OK)
+    RT_T3D_SET("ensync", IADLX3DEnhancedSync, g.d3d && g.d3d->GetEnhancedSync(g.gpu, &f) == ADLX_OK)
+    RT_T3D_SET("rsr", IADLX3DRadeonSuperResolution, g.d3d3 && g.d3d3->GetRadeonSuperResolution(&f) == ADLX_OK)
+    RT_T3D_SET("fsr", IADLX3DFidelityFXSuperResolution, g.d3d3 && g.d3d3->GetFidelityFXSuperResolution(g.gpu, &f) == ADLX_OK)
+    RT_T3D_SET("fg", IADLX3DFidelityFXFrameGenUpgrade, g.d3d3 && g.d3d3->GetFidelityFXFrameGenUpgrade(g.gpu, &f) == ADLX_OK)
+    RT_T3D_SET("afmf", IADLX3DAMDFluidMotionFrames, g.d3d1 && g.d3d1->GetAMDFluidMotionFrames(&f) == ADLX_OK)
+    return -3;
+}
+
+RT_API int rt_toggle_get(const char* name) {
+    adlx_bool sup = false, on = false;
+    int rc = toggleQuery(name, &sup, &on);
+    if (rc != 0) return rc == -2 || rc == -3 ? -1 : rc;
+    if (!sup) return -2;
     return on ? 1 : 0;
 }
 
 RT_API int rt_toggle_set(const char* name, int value) {
-    if (!strcmp(name, "freesync")) return rt_set_freesync(value);
-    auto* itf = feature3D(name);
-    if (!itf) return -1;
-    auto* base = (IADLX3DAntiLag*)itf;
-    adlx_bool on = false;
-    if (base->IsSupported(&on) != ADLX_OK || !on) { itf->Release(); return -2; }
-    ADLX_RESULT rc = base->SetEnabled(value != 0);
-    itf->Release();
-    return rc == ADLX_OK ? 0 : -100 + rc;
+    return toggleApply(name, value);
 }
-
 
 // ---------------- FreeSync ----------------
 static IADLXDisplayFreeSync* getFreeSync() {
@@ -983,37 +1028,47 @@ RT_API int rt_cr_current(char* buf, int len) {
 
 
 // ---------------- 锐化（ADLX 图像锐化强度） ----------------
-static IADLX3DImageSharpening* getSharpening() {
-    if (!ensureInit() || !g.d3d) return nullptr;
-    IADLX3DImageSharpening* f = nullptr;
-    if (g.d3d->GetImageSharpening(g.gpu, &f) != ADLX_OK || !f) return nullptr;
+static IADLX3DRadeonSuperResolution* getRsr() {
+    if (!ensureInit() || !g.d3d3) return nullptr;
+    IADLX3DRadeonSuperResolution* f = nullptr;
+    if (g.d3d3->GetRadeonSuperResolution(&f) != ADLX_OK || !f) return nullptr;
     return f;
 }
 
 RT_API int rt_rsr_sharp2(char* buf, int len) {
     if (!buf || len <= 0) return -1;
-    auto* f = getSharpening();
+    auto* f = getRsr();
     if (!f) return -2;
     adlx_bool sup = false, en = false;
     ADLX_IntRange r{};
     adlx_int cur = 0;
-    f->IsSupported(&sup);
-    if (sup) {
+    ADLX_RESULT rs = f->IsSupported(&sup);
+    if (rs == ADLX_OK && sup) {
         f->IsEnabled(&en);
         f->GetSharpnessRange(&r);
         f->GetSharpness(&cur);
     }
     f->Release();
+    if (rs != ADLX_OK) return -100 + (int)rs;
     snprintf(buf, (size_t)len, "%d|%d|%d", (int)sup, (int)en, (int)(cur / 10));
     return 0;
 }
 
 RT_API int rt_set_rsr_sharp(int v) {
-    auto* f = getSharpening();
+    auto* f = getRsr();
     if (!f) return -2;
-    int rc = f->SetSharpness(v);
+    adlx_bool sup = false;
+    f->IsSupported(&sup);
+    if (!sup) { f->Release(); return -3; }
+    ADLX_IntRange r{};
+    int value = v * 10;
+    if (f->GetSharpnessRange(&r) == ADLX_OK) {
+        if (value < (int)r.minValue) value = (int)r.minValue;
+        if (value > (int)r.maxValue) value = (int)r.maxValue;
+    }
+    ADLX_RESULT rc = f->SetSharpness((adlx_int)value);
     f->Release();
-    return rc == ADLX_OK ? 0 : -100 + rc;
+    return rc == ADLX_OK ? 0 : -100 + (int)rc;
 }
 
 // ---------------- 驱动可调范围（只读） ----------------
@@ -1551,3 +1606,4 @@ RT_API int rt_timing_set_index(int idx) {
     v->Release();
     return rc == ADLX_OK ? 0 : (int)rc;
 }
+

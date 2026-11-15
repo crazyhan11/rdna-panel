@@ -249,7 +249,7 @@ namespace RadeonTune
             ["FreeSync · FreeSync Premium · FreeSync Premium Pro · Adaptive-Sync（同一能力）"] = "FreeSync · FreeSync Premium · FreeSync Premium Pro · Adaptive-Sync (same capability)",
             ["Image Sharpening 2：锐化画面细节，可在驱动层对所有游戏生效；过度锐化会产生白边。"] = "Image Sharpening 2: sharpens detail driver-wide for all games; over-sharpening causes halos.",
             ["RGB 4:4:4 为完整色度信号；YCbCr 常见于 HDMI 连接，部分格式显示器不支持。"] = "RGB 4:4:4 carries full chroma; YCbCr is common over HDMI and some formats are unsupported by the display.",
-            ["RSR 锐化强度：0–100%，按 10 递增；由 ADL RSR Sharpening Strength 控制。"] = "RSR sharpness: 0–100% in steps of 10, driven by ADL RSR Sharpening Strength.",
+            ["RSR 锐化强度：0–100%，按 10 递增；由 ADLX RSR Sharpness 控制。"] = "RSR sharpness: 0–100% in steps of 10, driven by ADLX RSR Sharpness.",
             ["Radeon Anti-Lag：降低 CPU 到 GPU 的排队延迟，适合竞技射击类游戏；开启后可能轻微降低平均帧率。"] = "Radeon Anti-Lag: reduces CPU-to-GPU queue latency for competitive shooters; may slightly lower average frame rate.",
             ["Radeon Boost：快速移动视角时临时降低分辨率以提升帧率，静止时恢复原生分辨率。"] = "Radeon Boost: temporarily lowers resolution during fast camera motion to raise frame rate, restoring native resolution at rest.",
             ["Radeon Chill：根据画面动静动态调节帧率上限以降低功耗与温度，竞技场景下不建议开启。"] = "Radeon Chill: dynamically caps frame rate based on motion to cut power and heat; not recommended for competitive play.",
